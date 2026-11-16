@@ -307,6 +307,15 @@ test("the minimum window is 1024 x 640, one window, per-user installer with no a
   assert.deepEqual(pkg.build.publish[0], { provider: "github", owner: "Cairn-Air-Charter", repo: "acars", releaseType: "release" });
 });
 
+test("each version is published as ONE release with the installer and latest.yml together (ACR-2)", () => {
+  // Regression: electron-builder publishing on its own split a version across two releases,
+  // so the newest release had no latest.yml and update checks failed.
+  const workflow = read(".github/workflows/release.yml");
+  assert.match(workflow, /electron-builder --win --publish never/);
+  assert.doesNotMatch(workflow, /--publish always/);
+  assert.match(workflow, /gh release create "\$GITHUB_REF_NAME" \\\s+dist\/\*-Setup\.exe dist\/\*-Setup\.exe\.blockmap dist\/latest\.yml/);
+});
+
 test("updates never install during a flight (ACR-2)", () => {
   const { createUpdater } = require("../src/main/updater");
   const { EventEmitter } = require("node:events");
