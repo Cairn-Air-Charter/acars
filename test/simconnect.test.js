@@ -66,6 +66,33 @@ test("an aircraft in the MSFS menus isn't 'in a flight'; loading into a flight w
   sim.stop();
 });
 
+test("quick readings go out 4 times a second, and every frame near the ground at speed (ACR-8, ACR-12)", async () => {
+  const { SC, handle } = fakeSimConnect("DHC-2 Beaver");
+  const realNow = Date.now;
+  let now = 1_000_000;
+  Date.now = () => now;
+  try {
+    const sim = createSimConnection({ simconnect: SC });
+    const quick = [];
+    sim.events.on("frame", () => quick.push(now));
+    sim.start();
+    await tick();
+    const zeros = { readFloat64: () => 0, readInt32: () => 0, readString8: () => "", readString32: () => "", readString64: () => "", readString256: () => "" };
+    const frame = () => handle.emit("simObjectData", { requestID: 2, data: zeros });
+    // In cruise: frames arrive 60 times a second, 4 a second are kept
+    for (let i = 0; i < 120; i += 1) {
+      now += 1000 / 60;
+      frame();
+    }
+    assert.ok(quick.length >= 7 && quick.length <= 9, `${quick.length} in 2 s`);
+    // The quick readings were asked for every frame, all flight long
+    assert.ok(handle.requests.some((r) => r.requestId === 2 && r.period === 3));
+    sim.stop();
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test("connecting while a flight is already running is 'in a flight' as soon as the aircraft is known (ACR-8)", async () => {
   const { SC, handle, identity } = fakeSimConnect("DHC-2 Beaver");
   const sim = createSimConnection({ simconnect: SC });

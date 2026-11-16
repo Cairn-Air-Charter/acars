@@ -56,6 +56,7 @@ function createFlightManager(deps) {
   let landing = null;
   let recorder = null;
   let lastSample = null;
+  let lastFull = null; // the latest full (once-a-second) reading
   let lastSecond = 0;
   let simConnected = false;
   let waitingToResume = false;
@@ -190,10 +191,15 @@ function createFlightManager(deps) {
   // ---------------- Samples ----------------
 
   /** Every reading from the simulator. kind: "second" (once a second) or "frame". */
-  function onSample(sample, kind = "second") {
+  function onSample(raw, kind = "second") {
     if (!flight || crashing) return;
+    // Quick readings carry only the fast-changing values; the rest comes from the latest
+    // full reading, so the phase logic never sees, for example, missing engine state.
+    // The file keeps the quick reading as it came (the server fills it in the same way).
+    const sample = kind === "frame" && lastFull ? { ...lastFull, ...raw } : raw;
+    if (kind === "second") lastFull = raw;
     if (waitingToResume && !tryResume(sample)) return;
-    recorder.write(kind === "frame" ? { ...sample, hz: "f" } : sample, sample.t);
+    recorder.write(kind === "frame" ? { ...raw, hz: "f" } : raw, raw.t);
     landing.update(sample);
 
     const changes = detector.update(sample);

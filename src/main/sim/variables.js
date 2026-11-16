@@ -127,7 +127,7 @@ const IDENTITY = {
 };
 
 // The fast subset read every simulator frame around takeoff and landing (ACR-8)
-const FRAME_FIELDS = new Set(["lat", "lon", "alt", "agl", "aglCg", "ias", "gs", "vs", "hdgT", "trk", "pitch", "bank", "g", "gnd", "rwy", "surf", "gear", "flapsIdx", "tdLat", "tdLon", "tdV", "tdPitch", "tdBank", "tdHdg", "wDir", "wSpd", "simRate", "slew", "crash", "crashSeq"]);
+const FRAME_FIELDS = new Set(["lat", "lon", "alt", "agl", "aglCg", "ialt", "ias", "tas", "gs", "vs", "fuel", "pbrk", "stall", "ovs", "hdgM", "hdgT", "trk", "pitch", "bank", "g", "gnd", "rwy", "surf", "gear", "flapsIdx", "tdLat", "tdLon", "tdV", "tdPitch", "tdBank", "tdHdg", "wDir", "wSpd", "simRate", "slew", "crash", "crashSeq"]);
 
 function sampleVariables() {
   const list = COMMON.map(([name, units, type, field, convert]) => ({ name, units, type, field, convert }));

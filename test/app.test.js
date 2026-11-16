@@ -333,6 +333,21 @@ test("updates never install during a flight (ACR-2)", () => {
 // BRAND AND SHARED FILES
 // ==========================================
 
+test("the Flight screen shows the mission, Out/Off/On/In and flight events; messages have their own tab", () => {
+  const html = read("src/renderer/index.html");
+  const flight = html.slice(html.indexOf('id="flightView"'), html.indexOf('id="messagesView"'));
+  assert.match(flight, /id="flightMission"/);
+  assert.match(flight, /id="oooiTimes"/);
+  assert.match(flight, /id="statusFeed"/);
+  assert.doesNotMatch(flight, /ACARS messages|id="messages"|id="cabinText"/);
+  assert.match(html, /data-tab="messages">Messages <span class="badge" id="messageBadge"/);
+  const app = read("src/renderer/app.js");
+  assert.match(app, /function chime\(\)/); // the new-message chime stays
+  // The live numbers are a short, fixed list updated in place, so the card never changes size
+  assert.match(app, /\["To go", .*\],\n\s+\["ETE", .*\],\n\s+\["Ground speed", .*\],\n\s+\["Fuel on board", .*\],/);
+  assert.match(read("src/renderer/styles.css"), /\.now dd \{[^}]*tabular-nums[^}]*white-space: nowrap/);
+});
+
 test("the stylesheet uses only the brand tokens: no hex colors outside tokens.css (brand.md)", () => {
   assert.doesNotMatch(read("src/renderer/styles.css"), /#[0-9a-fA-F]{3,8}\b/);
   assert.match(read("src/renderer/index.html"), /src="assets\/cairn-primary-dark\.png" alt="Cairn Air Charter" width="180"/);

@@ -95,7 +95,7 @@
   // ==========================================
 
   /**
-   * points: [[distanceNm, value], ...] with distance to the landing threshold (negative = before).
+   * points: [[distanceFt, value], ...] with distance to the landing threshold (negative = before).
    * opts: { label, unit, zeroLine }
    */
   function lineChart(container, points, opts) {
@@ -124,7 +124,7 @@
     for (const t of niceTicks(xMin, xMax, 6)) {
       text(box, sx(t), H - m.b + 16, fmt(t), { "text-anchor": "middle", fill: MUTED, "font-size": 11 });
     }
-    text(box, (m.l + W - m.r) / 2, H - 4, "Distance to threshold (nm)", { "text-anchor": "middle", fill: MUTED, "font-size": 11 });
+    text(box, (m.l + W - m.r) / 2, H - 4, "Distance to threshold (ft)", { "text-anchor": "middle", fill: MUTED, "font-size": 11 });
     if (xMin <= 0 && xMax >= 0) {
       svg("line", { x1: sx(0), x2: sx(0), y1: m.t, y2: H - m.b, stroke: MUTED, "stroke-width": 1, "stroke-dasharray": "4 4" }, box);
       text(box, sx(0) + 4, m.t + 10, "Threshold", { fill: MUTED, "font-size": 11 });
@@ -146,7 +146,7 @@
       cross.setAttribute("x2", sx(best[0]));
       dot.setAttribute("cx", sx(best[0]));
       dot.setAttribute("cy", sy(best[1]));
-      tip.textContent = `${fmt(best[0])} nm: ${fmt(best[1])} ${opts.unit}`;
+      tip.textContent = `${fmt(best[0])} ft: ${fmt(best[1])} ${opts.unit}`;
       tip.setAttribute("x", Math.min(sx(best[0]) + 8, W - 170));
       for (const n of [cross, dot, tip]) n.setAttribute("visibility", "visible");
     };
@@ -154,9 +154,12 @@
     hit.addEventListener("pointerleave", () => { for (const n of [cross, dot, tip]) n.setAttribute("visibility", "hidden"); });
   }
 
-  /** profile.points: [[distNm, heightAboveField, vs, ias], ...] -> three charts */
+  // profile.points: [[distanceFt, heightAboveField, vs, ias], ...]. Reports analyzed before
+  // the charts moved to feet have no unit and distances in nm; those are converted.
   function approach(containers, profile) {
-    const p = (profile && profile.points) || [];
+    const raw = (profile && profile.points) || [];
+    const toFt = profile && profile.unit === "ft" ? 1 : 6076.12;
+    const p = raw.map((x) => [Math.round(x[0] * toFt), x[1], x[2], x[3]]);
     if (containers.altitude) lineChart(containers.altitude, p.map((x) => [x[0], x[1]]), { label: "Height above the field", unit: "ft" });
     if (containers.verticalSpeed) lineChart(containers.verticalSpeed, p.map((x) => [x[0], x[2]]), { label: "Vertical speed", unit: "fpm", zeroLine: true });
     if (containers.airspeed) lineChart(containers.airspeed, p.map((x) => [x[0], x[3]]), { label: "Indicated airspeed", unit: "kt" });

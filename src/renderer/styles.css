@@ -126,15 +126,31 @@ img { max-width: 100%; }
 .timeline li.done { color: var(--color-text); border-color: var(--color-success); }
 .timeline li.current { color: var(--cairn-basalt); background: var(--color-primary); border-color: var(--color-primary); font-weight: 600; }
 .timeline time { font-size: 0.75rem; }
-.oooi { display: flex; gap: 24px; margin: 0; }
-.oooi div { display: flex; gap: 6px; }
-.oooi dt { color: var(--color-text-muted); }
-.oooi dd { margin: 0; font-weight: 600; }
-.flight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-.live { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 0; }
-.live div { display: grid; }
-.live dt { color: var(--color-text-muted); font-size: 0.85rem; }
-.live dd { margin: 0; font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Out, Off, On, In: four equal boxes, in flight order */
+.oooi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
+.oooi div { display: grid; gap: 2px; padding: 10px; border-radius: 8px; background: var(--color-background); }
+.oooi dt { font-weight: 600; }
+.oooi dt small { display: block; font-weight: 400; color: var(--color-text-muted); font-size: 0.8rem; }
+.oooi dd { margin: 0; font-variant-numeric: tabular-nums; }
+
+/* "Now": a few numbers in fixed-width boxes with fixed-width digits, so nothing on the
+   screen changes size as they update */
+.now { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0 0; }
+.now div { display: grid; gap: 2px; padding: 10px; border-radius: 8px; background: var(--color-background); min-width: 0; }
+.now dt { color: var(--color-text-muted); font-size: 0.85rem; white-space: nowrap; }
+.now dd { margin: 0; font-size: 1.3rem; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.flight-top { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; }
+.flight-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; align-items: start; }
+.feed-tall { max-height: 460px; }
+
+/* The mission this flight is for */
+.mission-panel { display: grid; gap: 6px; }
+.mission-panel p { margin: 0; }
+.mission-panel .route { font-size: 1.15rem; font-weight: 600; }
+
+/* Unread messages */
+.badge { display: inline-block; min-width: 22px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: var(--color-primary); color: var(--cairn-basalt); font-size: 0.8rem; text-align: center; }
 .feed { list-style: none; margin: 0; padding: 0; max-height: 320px; overflow: auto; display: grid; gap: 4px; }
 .feed li { display: flex; gap: 10px; padding: 4px 0; border-bottom: 1px solid var(--color-border); }
 .feed time { color: var(--color-text-muted); min-width: 4.5em; }
@@ -152,3 +168,8 @@ img { max-width: 100%; }
 .picks { display: flex; flex-wrap: wrap; gap: 8px; }
 .picks button[aria-pressed="true"] { background: var(--color-primary); color: var(--cairn-basalt); }
 .chart { background: var(--color-background); border-radius: 8px; padding: 8px; }
+
+/* Sections of a flight report in the logbook: a clear break between each */
+.report-section { display: grid; gap: 10px; padding-top: 16px; margin-top: 4px; border-top: 1px solid var(--color-border); }
+.report-section h3 { font-size: 1.05rem; }
+.route { font-size: 1.1rem; font-weight: 600; }

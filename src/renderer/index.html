@@ -50,6 +50,7 @@
         <button type="button" class="tab" data-tab="home">Home</button>
         <button type="button" class="tab" data-tab="missions">Missions</button>
         <button type="button" class="tab" data-tab="logbook">Logbook</button>
+        <button type="button" class="tab" data-tab="messages">Messages <span class="badge" id="messageBadge" hidden></span></button>
         <button type="button" class="tab" data-tab="settings">Settings</button>
       </nav>
 
@@ -171,39 +172,46 @@
 
         <!-- Flight (ACR-10) -->
         <section id="flightView" class="view" hidden>
+          <section class="card mission-panel" id="flightMission" aria-label="This flight"></section>
           <ol class="timeline" id="phaseTimeline"></ol>
-          <dl class="oooi" id="oooiTimes"></dl>
           <p id="resumeBanner" class="message message-warning" hidden>Lost MSFS. Your flight is saved. Reload the aircraft where you were and ACARS will pick back up.</p>
           <p id="briefing" class="message message-info" hidden></p>
           <p id="flightWarning" class="message message-warning" role="alert" hidden></p>
-          <div class="flight-grid">
+          <div class="flight-top">
             <section class="card">
-              <h2>Live data</h2>
-              <dl class="live" id="liveData"></dl>
+              <h2>Out, Off, On, In</h2>
+              <dl class="oooi" id="oooiTimes"></dl>
+            </section>
+            <section class="card">
+              <h2>Now</h2>
+              <dl class="now" id="liveData"></dl>
               <p id="outboxStatus" class="muted" hidden></p>
             </section>
+          </div>
+          <div class="flight-grid">
             <section class="card stack">
-              <h2>Status</h2>
-              <ol class="feed" id="statusFeed"></ol>
+              <h2>Flight events</h2>
+              <ol class="feed feed-tall" id="statusFeed"></ol>
             </section>
             <section class="card stack" id="landingCard" hidden>
               <h2>Landing</h2>
               <dl class="facts" id="landingFacts"></dl>
               <p class="muted">Preliminary. Your final numbers come with your flight report.</p>
             </section>
-            <section class="card stack">
-              <h2>Cabin</h2>
-              <p id="cabinText" class="muted"></p>
-            </section>
-            <section class="card stack">
-              <h2>ACARS messages</h2>
-              <ul class="feed" id="messages"></ul>
-            </section>
           </div>
           <div class="actions">
             <button type="button" class="button button-primary" id="fileButton" disabled>File flight report</button>
             <button type="button" class="button button-danger" id="cancelFlightButton">Cancel flight</button>
           </div>
+        </section>
+
+        <!-- Messages: Trailhead notices and messages from Cairn -->
+        <section id="messagesView" class="view" hidden>
+          <section class="card stack">
+            <h2>ACARS messages</h2>
+            <p class="muted">Messages from Cairn, such as flight report approvals and notes from staff. Dismissing one dismisses it on the website too.</p>
+            <ul class="rows" id="messageList"></ul>
+          </section>
         </section>
       </main>
     </div>

@@ -11,6 +11,9 @@ const { EventEmitter } = require("events");
 const vars = require("./variables");
 
 const RETRY_MS = 5000;
+// Quick readings (position, speeds, attitude, G...) 4 times a second all flight long, on top of
+// the full reading once a second, so charts and FOQA have smooth data (ACR-8, ACR-12)
+const QUICK_EVERY_MS = 250;
 const DEF = { second: 1, frame: 2, identity: 3, facility: 4 };
 const REQ = { second: 1, frame: 2, identity: 3, identityNow: 4, simState: 5 };
 const EVENTS = { simStart: 1, simStop: 2, pause: 3, pauseEx: 4, crashed: 5, crashReset: 6, aircraftLoaded: 7, flightLoaded: 8, positionChanged: 9, sim: 10 };
@@ -28,7 +31,8 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
   let simRunning = false;
   let inFlight = false;
   let aircraft = null;
-  let frameMode = false;
+  let frameMode = false; // every frame, near the ground at speed
+  let lastQuick = 0;
   let retryTimer = null;
   let stopped = false;
   const missing = new Set();
@@ -81,13 +85,13 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
     lists.identity = define(DEF.identity, vars.identityVariables(simulator));
     handle.requestDataOnSimObject(REQ.second, DEF.second, SC.SimConnectConstants.OBJECT_ID_USER, SC.SimConnectPeriod.SECOND);
     handle.requestDataOnSimObject(REQ.identity, DEF.identity, SC.SimConnectConstants.OBJECT_ID_USER, SC.SimConnectPeriod.SECOND, SC.DataRequestFlag.DATA_REQUEST_FLAG_CHANGED);
-    setFrameMode(frameMode, true);
+    // The quick readings come every simulator frame; ACARS keeps 4 a second, or all of them
+    // near the ground at speed (see onData)
+    handle.requestDataOnSimObject(REQ.frame, DEF.frame, SC.SimConnectConstants.OBJECT_ID_USER, SC.SimConnectPeriod.SIM_FRAME);
   }
 
-  function setFrameMode(on, force) {
-    if (!handle || (on === frameMode && !force)) return;
+  function setFrameMode(on) {
     frameMode = on;
-    handle.requestDataOnSimObject(REQ.frame, DEF.frame, SC.SimConnectConstants.OBJECT_ID_USER, on ? SC.SimConnectPeriod.SIM_FRAME : SC.SimConnectPeriod.NEVER);
   }
 
   function read(data, list) {
@@ -130,7 +134,8 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
       // Every frame from the takeoff roll to 200 ft, and from 200 ft on approach to 30 kt
       setFrameMode((sample.gs || 0) > 30 && (sample.gnd === true || (sample.agl || 0) < 200));
       events.emit("sample", sample);
-    } else {
+    } else if (frameMode || now - lastQuick >= QUICK_EVERY_MS) {
+      lastQuick = now;
       events.emit("frame", sample);
     }
   }
@@ -291,4 +296,4 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
   };
 }
 
-module.exports = { createSimConnection, RETRY_MS };
+module.exports = { createSimConnection, RETRY_MS, QUICK_EVERY_MS };

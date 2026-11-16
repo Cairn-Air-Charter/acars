@@ -303,6 +303,20 @@ test("the flight data file is written as it happens and stays readable after a c
   assert.equal(times.at(-1), 99000);
 });
 
+test("quick readings never end a flight early: missing engine data isn't 'engines off' (ACR-11)", async () => {
+  const ctx = setUp();
+  await begin(ctx);
+  const parkedIndex = ctx.flight.samples.findIndex((s) => s.ph === "parked");
+  await flyAll(ctx, ctx.flight.samples.slice(0, parkedIndex + 3));
+  // Parked with the engine running: quick readings carry no engine values at all
+  const last = ctx.flight.samples[parkedIndex + 2];
+  for (let i = 1; i <= 40; i += 1) {
+    ctx.manager.onSample({ t: last.t + i * 250, lat: last.lat, lon: last.lon, gs: 0, gnd: true, alt: last.alt }, "frame");
+  }
+  assert.notEqual(ctx.manager.view().phase, "engines_off");
+  assert.equal(ctx.manager.view().canFile, false);
+});
+
 test("time acceleration shows the warning right away (ACR-13)", async () => {
   const ctx = setUp({ accelSeconds: 40 });
   await begin(ctx);

@@ -172,8 +172,12 @@ $("forgotLink").addEventListener("click", (e) => {
 function selectTab(tab) {
   state.tab = tab;
   for (const button of document.querySelectorAll(".tab")) button.setAttribute("aria-selected", String(button.dataset.tab === tab));
-  for (const name of ["home", "missions", "logbook", "settings", "flight"]) $(`${name}View`).hidden = name !== tab;
+  for (const name of ["home", "missions", "logbook", "messages", "settings", "flight"]) $(`${name}View`).hidden = name !== tab;
   if (tab === "home") loadHome();
+  if (tab === "messages") {
+    renderMessages();
+    markMessagesRead();
+  }
   if (tab === "missions") loadMissions(state.missionsOffset);
   if (tab === "logbook") loadLogbook(state.logOffset);
   if (tab === "settings") loadSettings();
@@ -192,24 +196,22 @@ async function loadHome() {
   const here = h.currentAirport;
   $("youAreAt").replaceChildren("You're at ", airport(here.code), here.isHomeBase ? ", the Cairn home base" : "");
 
-  // Notices (each can be dismissed, here and on the website)
-  const box = $("notices");
-  box.textContent = "";
+  // Messages (Trailhead notices) live on their own tab. A new one plays the chime, and
+  // Home only says there are new ones.
+  let fresh = false;
   for (const n of h.notices) {
     if (!state.seenNotices.has(n.id)) {
-      if (state.seenNotices.size) chime();
+      if (state.seenNotices.size) fresh = true;
       state.seenNotices.add(n.id);
     }
-    const dismiss = el("button", { type: "button", className: "button button-secondary" }, "Dismiss");
-    const item = el("div", { className: "message message-info notice" }, el("span", {}, n.message), dismiss);
-    dismiss.addEventListener("click", async () => {
-      dismiss.disabled = true;
-      await A.dismissNotice(n.id);
-      item.remove();
-    });
-    box.append(item);
   }
+  if (fresh) chime();
   renderMessages();
+  if (state.tab === "messages") markMessagesRead();
+  const unread = unreadMessages().length;
+  $("notices").replaceChildren(...(unread ? [el("p", { className: "message message-info notice" },
+    el("span", {}, `You have ${unread} new message${unread === 1 ? "" : "s"}.`),
+    el("button", { type: "button", className: "button button-secondary", onclick: () => selectTab("messages") }, "Open messages"))] : []));
 
   // Your mission, every leg in order
   const m = h.mission;
@@ -434,49 +436,55 @@ async function openReport(id) {
   }
   const r = result.data.report;
   const fact = (label, value) => el("div", {}, el("dt", {}, label), el("dd", {}, value === null || value === undefined ? "—" : value));
+  // Each part of the report is its own section, with a clear break between them
+  const section = (title, ...children) => el("section", { className: "report-section" }, el("h3", {}, title), ...children);
+  const oooi = (label, meaning, value) => el("div", {}, el("dt", {}, label, el("small", {}, meaning)), el("dd", {}, CairnTime.formatTime(value)));
   box.append(
     el("div", { className: "card-head" }, el("h2", {}, r.mission.title || "Flight report"), el("span", { className: "tag" }, r.statusLabel || r.status)),
-    el("p", {}, route([r.route.departure.code, r.route.arrival.code])),
+    el("p", { className: "route" }, route([r.route.departure.code, r.route.arrival.code])),
     r.diversion ? el("p", {}, r.diversion.text, r.diversion.reason ? ` ${r.diversion.reason}: ${r.diversion.explanation || ""}` : "") : null,
     r.aircraft.note ? el("p", { className: "muted" }, r.aircraft.note) : null,
-    el("dl", { className: "facts" },
+    section("Summary", el("dl", { className: "facts" },
       fact("Date", CairnTime.formatDateTime(r.date)), fact("Aircraft", r.aircraft.flown), fact("Block time", minutes(r.times.blockMinutes)),
-      fact("Air time", minutes(r.times.airMinutes)), fact("Distance", `${number(r.distanceNm)} nm`), fact("Fuel used", r.fuel.usedLbs === null ? null : `${number(r.fuel.usedLbs)} lbs`),
-      fact("Out", CairnTime.formatTime(r.times.out)), fact("Off", CairnTime.formatTime(r.times.off)), fact("On", CairnTime.formatTime(r.times.on)), fact("In", CairnTime.formatTime(r.times.in)))
+      fact("Air time", minutes(r.times.airMinutes)), fact("Distance", `${number(r.distanceNm)} nm`), fact("Fuel used", r.fuel.usedLbs === null ? null : `${number(r.fuel.usedLbs)} lbs`))),
+    section("Out, Off, On, In", el("dl", { className: "oooi" },
+      oooi("Out", "First movement", r.times.out), oooi("Off", "Wheels up", r.times.off), oooi("On", "Touchdown", r.times.on), oooi("In", "Parked", r.times.in)))
   );
   if (r.review.reasons.length || r.review.noteToPilot) {
-    box.append(el("div", { className: "stack" }, el("h3", {}, "Review"), ...r.review.reasons.map((x) => el("p", {}, x)),
+    box.append(section("Review", ...r.review.reasons.map((x) => el("p", {}, x)),
       r.review.noteToPilot ? el("p", { className: "message message-info" }, `Note from the reviewer: ${r.review.noteToPilot}`) : null));
   }
   const track = el("div", { className: "chart" });
-  box.append(el("h3", {}, "Track"), track);
+  box.append(section("Track", track));
   FlightCharts.track(track, r.track, [
     { code: r.route.departure.code, lat: r.route.departure.lat, lon: r.route.departure.lon },
     { code: r.route.arrival.code, lat: r.route.arrival.lat, lon: r.route.arrival.lon },
   ]);
   if (r.timeline && r.timeline.length) {
-    box.append(el("h3", {}, "Timeline"), el("ol", { className: "feed" }, r.timeline.map((t) => el("li", {}, el("time", {}, CairnTime.formatTime(t.at)), t.message || t.phase || t.type))));
+    box.append(section("Flight events", el("ol", { className: "feed" }, r.timeline.map((t) => el("li", {}, el("time", {}, CairnTime.formatTime(t.at)), t.message || t.phase || t.type)))));
   }
   const m = r.foqa && r.foqa.metrics;
-  if (m) {
-    box.append(el("h3", {}, "Approach and landing"), el("dl", { className: "facts" },
+  if (r.analysis && r.analysis.status === "pending") {
+    box.append(section("Approach and landing", el("p", { className: "muted" }, "Your final numbers, the approach charts and the runway drawing come with the hourly check, at the top of the hour.")));
+  } else if (m) {
+    box.append(section("Approach and landing", el("dl", { className: "facts" },
       fact("Touchdown rate", m.touchdown_fpm === null ? null : `${number(m.touchdown_fpm)} fpm`), fact("Peak G", number(m.touchdown_g, 2)),
       fact("Past the threshold", m.touchdown_distance_ft === null ? null : `${number(m.touchdown_distance_ft)} ft`), fact("From the centerline", m.centerline_offset_ft === null ? null : `${number(m.centerline_offset_ft)} ft`),
-      fact("Bounces", number(m.bounces)), fact("Stable at the gate", m.stable_at_gate === null ? null : m.stable_at_gate ? "Yes" : "No")));
+      fact("Bounces", number(m.bounces)), fact("Stable at the gate", m.stable_at_gate === null ? null : m.stable_at_gate ? "Yes" : "No"))));
     const profile = r.charts.profile;
     const runway = el("div", { className: "chart" });
     const alt = el("div", { className: "chart" });
     const vs = el("div", { className: "chart" });
     const ias = el("div", { className: "chart" });
-    box.append(el("h3", {}, "Runway"), runway, el("h3", {}, "Height above the field"), alt, el("h3", {}, "Vertical speed"), vs, el("h3", {}, "Airspeed"), ias);
+    box.append(section("Runway", runway), section("Height above the field", alt), section("Vertical speed", vs), section("Airspeed", ias));
     FlightCharts.runway(runway, profile && profile.runway);
     FlightCharts.approach({ altitude: alt, verticalSpeed: vs, airspeed: ias }, profile);
   }
   if (r.foqa && r.foqa.events && r.foqa.events.length) {
-    box.append(el("h3", {}, "FOQA"), el("ul", { className: "rows" }, r.foqa.events.map((e) =>
-      el("li", { className: "row" }, el("span", { className: "row-title" }, `${e.name || e.code} · ${e.kind === "good_call" ? "Good call" : e.level ? `Level ${e.level}` : "Habit"}`), e.advice ? el("span", { className: "muted" }, e.advice) : null))));
+    box.append(section("FOQA", el("ul", { className: "rows" }, r.foqa.events.map((e) =>
+      el("li", { className: "row" }, el("span", { className: "row-title" }, `${e.name || e.code} · ${e.kind === "good_call" ? "Good call" : e.level ? `Level ${e.level}` : "Habit"}`), e.advice ? el("span", { className: "muted" }, e.advice) : null)))));
   }
-  if (r.integrity && r.integrity.length) box.append(el("h3", {}, "Integrity notes"), ...r.integrity.map((t) => el("p", {}, t)));
+  if (r.integrity && r.integrity.length) box.append(section("Integrity notes", ...r.integrity.map((t) => el("p", {}, t))));
   box.append(el("div", { className: "actions" }, el("button", { type: "button", className: "button button-secondary", onclick: () => A.openInBrowser(`${TRAILHEAD}/flights/${r.id}`) }, "Open on the website")));
   box.scrollIntoView({ behavior: "smooth" });
 }
@@ -619,9 +627,26 @@ function applyFlight(view) {
   $("resumeBanner").hidden = !view.waitingToResume;
   $("fileButton").disabled = !view.canFile;
   $("statusFeed").replaceChildren(...view.feed.map(feedItem));
-  const pax = view.mission && view.leg ? view.leg.passengers : 0;
-  $("cabinText").textContent = pax ? `${pax} passenger${pax === 1 ? "" : "s"} on board.` : "No passengers on this leg.";
+  renderFlightMission(view);
+  if (!$("liveData").children.length) renderNow({});
   if (view.landing) renderLanding(view.landing);
+}
+
+/** What this flight is: the mission, the leg, the load and the time limit (ACR-10). */
+function renderFlightMission(view) {
+  const m = view.mission || {};
+  const full = state.home && state.home.mission && state.home.mission.id === m.id ? state.home.mission : null;
+  const leg = full ? full.legs.find((l) => l.id === view.leg.id) : null;
+  const dep = view.leg.departure;
+  const arr = view.leg.arrival;
+  const load = leg
+    ? `${leg.passengers} passenger${leg.passengers === 1 ? "" : "s"} · ${number(leg.cargo_lbs)} lbs cargo${(leg.cargo_items || []).length ? ` (${leg.cargo_items.map((c) => c.description).join(", ")})` : ""}`
+    : `${view.leg.passengers || 0} passengers`;
+  $("flightMission").replaceChildren(
+    el("div", { className: "card-head" }, el("h2", {}, m.title || "Your flight"), el("span", { className: "tag" }, full ? full.type_label : m.type || "")),
+    el("p", { className: "route" }, full && leg ? `Leg ${leg.leg_number} of ${full.legs.length}: ` : "", airport(dep.code), ` ${dep.name || ""} → `, airport(arr.code), ` ${arr.name || ""}`),
+    el("p", { className: "muted" }, [m.aircraft, leg ? `${number(leg.distance_nm)} nm` : null, load, full ? `due ${CairnTime.formatDateTime(full.due_at)}` : null].filter(Boolean).join(" · "))
+  );
 }
 
 function feedItem(item) {
@@ -634,8 +659,13 @@ function renderTimeline(phase, oooi) {
   $("phaseTimeline").replaceChildren(...PHASES.map(([key, label], i) => el("li", { className: key === phase ? "current" : i < index ? "done" : "" },
     label, state.phaseTimes[key] && i <= index ? el("time", {}, CairnTime.formatTime(state.phaseTimes[key])) : null)));
   if (phase === "go_around") $("phaseTimeline").append(el("li", { className: "current" }, "Go-around"));
-  const fact = (label, t) => el("div", {}, el("dt", {}, label), el("dd", {}, t ? CairnTime.formatTime(t) : "—"));
-  $("oooiTimes").replaceChildren(fact("Out", oooi.out), fact("Off", oooi.off), fact("On", oooi.on), fact("In", oooi.in));
+  const fact = (label, meaning, t) => el("div", {}, el("dt", {}, label, el("small", {}, meaning)), el("dd", {}, t ? CairnTime.formatTime(t) : "—"));
+  $("oooiTimes").replaceChildren(
+    fact("Out", "First movement", oooi.out),
+    fact("Off", "Wheels up", oooi.off),
+    fact("On", "Touchdown", oooi.on),
+    fact("In", "Parked", oooi.in)
+  );
 }
 
 function renderLanding(l) {
@@ -651,19 +681,82 @@ function renderLanding(l) {
   );
 }
 
+// ==========================================
+// MESSAGES (their own tab)
+// ==========================================
+
+// Which messages have been seen on this PC: a convenience only, so it's fine if it's lost
+function readIds() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem("readMessages") || "[]"));
+  } catch {
+    return new Set();
+  }
+}
+
+function unreadMessages() {
+  const read = readIds();
+  return ((state.home && state.home.notices) || []).filter((n) => !read.has(n.id));
+}
+
+function markMessagesRead() {
+  const ids = ((state.home && state.home.notices) || []).map((n) => n.id);
+  try {
+    localStorage.setItem("readMessages", JSON.stringify(ids));
+  } catch {
+    /* storage unavailable */
+  }
+  updateBadge();
+}
+
+function updateBadge() {
+  const count = unreadMessages().length;
+  $("messageBadge").textContent = String(count);
+  $("messageBadge").hidden = count === 0;
+}
+
 function renderMessages() {
   const notices = (state.home && state.home.notices) || [];
-  $("messages").replaceChildren(...(notices.length ? notices.map((n) => el("li", {}, el("time", {}, CairnTime.formatTime(n.created_at)), el("span", {}, n.message))) : [el("li", { className: "muted" }, "No messages.")]));
+  const read = readIds();
+  $("messageList").replaceChildren(...(notices.length
+    ? notices.map((n) => {
+        const dismiss = el("button", { type: "button", className: "button button-secondary" }, "Dismiss");
+        const item = el("li", { className: "row notice" },
+          el("span", {}, el("strong", {}, CairnTime.formatDateTime(n.created_at)), read.has(n.id) ? "" : " · New", el("br"), n.message),
+          dismiss);
+        dismiss.addEventListener("click", async () => {
+          dismiss.disabled = true;
+          await A.dismissNotice(n.id);
+          state.home.notices = state.home.notices.filter((x) => x.id !== n.id);
+          item.remove();
+          updateBadge();
+        });
+        return item;
+      })
+    : [el("li", { className: "muted" }, "No messages.")]));
+  updateBadge();
+}
+
+/** A few numbers only, in fixed-size boxes (styles.css .now), updated in place. */
+function renderNow(live) {
+  const known = (v) => v !== null && v !== undefined;
+  const values = [
+    ["To go", known(live.distanceNm) ? `${number(live.distanceNm, 0)} nm` : "—"],
+    ["ETE", known(live.eteMinutes) ? minutes(live.eteMinutes) : "—"],
+    ["Ground speed", known(live.gs) ? `${number(live.gs)} kt` : "—"],
+    ["Fuel on board", known(live.fuelLbs) ? `${number(live.fuelLbs)} lbs` : "—"],
+  ];
+  const box = $("liveData");
+  if (box.children.length !== values.length) {
+    box.replaceChildren(...values.map(([label]) => el("div", {}, el("dt", {}, label), el("dd", {}, "—"))));
+  }
+  values.forEach(([, value], i) => {
+    box.children[i].querySelector("dd").textContent = value;
+  });
 }
 
 A.on("live", (live) => {
-  const fact = (label, value) => el("div", {}, el("dt", {}, label), el("dd", {}, value));
-  $("liveData").replaceChildren(
-    fact("Altitude", `${number(live.altitudeFt)} ft`), fact("Indicated airspeed", `${number(live.ias)} kt`), fact("Ground speed", `${number(live.gs)} kt`),
-    fact("Vertical speed", `${number(live.vs)} fpm`), fact("Heading", `${number(live.heading)}°`), fact("Fuel on board", `${number(live.fuelLbs)} lbs`),
-    fact("Fuel flow", `${number(live.fuelFlowPph)} lbs/h`), fact("To destination", live.distanceNm === null ? "—" : `${number(live.distanceNm, 1)} nm`),
-    fact("Time to destination", live.eteMinutes === null ? "—" : minutes(live.eteMinutes))
-  );
+  renderNow(live);
   if (state.flight && live.phase !== state.flight.phase) {
     state.flight.phase = live.phase;
     state.flight.oooi = live.oooi;
