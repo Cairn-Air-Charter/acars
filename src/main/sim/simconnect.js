@@ -12,7 +12,7 @@ const vars = require("./variables");
 
 const RETRY_MS = 5000;
 const DEF = { second: 1, frame: 2, identity: 3, facility: 4 };
-const REQ = { second: 1, frame: 2, identity: 3 };
+const REQ = { second: 1, frame: 2, identity: 3, identityNow: 4, simState: 5 };
 const EVENTS = { simStart: 1, simStop: 2, pause: 3, pauseEx: 4, crashed: 5, crashReset: 6, aircraftLoaded: 7, flightLoaded: 8, positionChanged: 9, sim: 10 };
 const FACILITY_REQUEST_BASE = 1000;
 
@@ -23,6 +23,9 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
   const SC = simconnect;
   let handle = null;
   let simulator = null;
+  // "In a flight" needs both: the sim is running a flight (not the menus), and an aircraft
+  // is loaded. MSFS has an aircraft "loaded" in its menus too, so the aircraft alone isn't enough.
+  let simRunning = false;
   let inFlight = false;
   let aircraft = null;
   let frameMode = false;
@@ -40,6 +43,23 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
 
   function publish() {
     events.emit("status", status());
+  }
+
+  function updateInFlight() {
+    inFlight = simRunning && Boolean(aircraft && aircraft.title);
+    publish();
+  }
+
+  // Ask again for the loaded aircraft right now (it's only sent by itself when it changes)
+  function requestIdentityNow() {
+    if (!handle) return;
+    handle.requestDataOnSimObject(REQ.identityNow, DEF.identity, SC.SimConnectConstants.OBJECT_ID_USER, SC.SimConnectPeriod.ONCE);
+  }
+
+  function setSimRunning(running) {
+    simRunning = running;
+    if (running) requestIdentityNow();
+    updateInFlight();
   }
 
   const dataType = (type) => ({ f: SC.SimConnectDataType.FLOAT64, i: SC.SimConnectDataType.INT32, s8: SC.SimConnectDataType.STRING8, s32: SC.SimConnectDataType.STRING32, s64: SC.SimConnectDataType.STRING64, s256: SC.SimConnectDataType.STRING256 })[type];
@@ -82,7 +102,7 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
 
   function onData(recv) {
     const now = Date.now();
-    if (recv.requestID === REQ.identity) {
+    if (recv.requestID === REQ.identity || recv.requestID === REQ.identityNow) {
       const raw = read(recv.data, lists.identity);
       const info = {};
       lists.identity.forEach((v, i) => { info[v.field] = typeof raw[i] === "string" ? raw[i].trim() : raw[i]; });
@@ -94,9 +114,8 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
       };
       const changed = !aircraft || aircraft.title !== next.title || aircraft.designator !== next.designator;
       aircraft = { ...(aircraft || {}), ...next };
-      inFlight = Boolean(next.title);
       if (changed) events.emit("aircraft", aircraft);
-      publish();
+      updateInFlight();
       return;
     }
     const list = recv.requestID === REQ.frame ? lists.frame : lists.second;
@@ -200,10 +219,15 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
       handle.on("event", (recv) => {
         if (recv.clientEventId === EVENTS.crashed) events.emit("crashed");
         if (recv.clientEventId === EVENTS.pause) events.emit("paused", recv.data !== 0);
-        if (recv.clientEventId === EVENTS.simStop) {
-          inFlight = false;
-          publish();
-        }
+        if (recv.clientEventId === EVENTS.simStart) setSimRunning(true);
+        if (recv.clientEventId === EVENTS.simStop) setSimRunning(false);
+        // "Sim" says whether a flight is running: 1 in a flight, 0 in the menus
+        if (recv.clientEventId === EVENTS.sim) setSimRunning(recv.data === 1);
+        if (recv.clientEventId === EVENTS.flightLoaded || recv.clientEventId === EVENTS.aircraftLoaded) requestIdentityNow();
+      });
+      // Whether a flight is already running when ACARS connects
+      handle.on("systemState", (recv) => {
+        if (recv.requestID === REQ.simState) setSimRunning(recv.dataInteger === 1);
       });
       handle.on("eventFilename", (recv) => {
         if (recv.clientEventId === EVENTS.aircraftLoaded) events.emit("aircraftLoaded", recv.fileName);
@@ -220,6 +244,7 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
       for (const [name, id] of subscribe) handle.subscribeToSystemEvent(id, name);
       defineAll();
       defineFacility();
+      handle.requestSystemState(REQ.simState, "Sim");
       publish();
     } catch (error) {
       handle = null;
@@ -235,6 +260,7 @@ function createSimConnection({ appName = "Cairn ACARS", log = () => {}, simconne
       /* already closed */
     }
     handle = null;
+    simRunning = false;
     inFlight = false;
     aircraft = null;
     frameMode = false;
