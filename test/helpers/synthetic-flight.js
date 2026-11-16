@@ -61,7 +61,7 @@ function buildFlight(options = {}) {
   const samples = [];
   const phases = [];
   const elev = field.elevationFt;
-  const s = { t: o.startMs, x: -o.distanceNm * FT_PER_NM - 1500, y: 0, alt: elev, gs: 0, vs: 0, gnd: true, pitch: 0, bank: 0, hdg: 0, fuel: p.fuel, ph: "preflight", g: 1, flapsIdx: 0, gear: 100, pbrk: true, engines: false, rate: 1, slew: false };
+  const s = { t: o.startMs, x: -o.distanceNm * FT_PER_NM - 1500, y: 0, alt: elev, gs: 0, vs: 0, gnd: true, pitch: 0, bank: 0, hdg: 0, fuel: p.fuel, ph: "preflight", g: 1, flapsIdx: 0, gear: 100, pbrk: true, engines: false, rate: 1, slew: false, td: { tdV: 0, tdLat: 0, tdLon: 0, tdPitch: 0, tdBank: 0 } };
   let fuelExtra = 0;
   let phase = null;
   const setPhase = (name) => {
@@ -87,6 +87,8 @@ function buildFlight(options = {}) {
       wDir: field.headingTrue, wSpd: 8, oat: 10, vis: 16000, cloud: false, slp: 1013.25, kohl: 29.92,
       stall: false, ovs: false, flapOvs: false, gearOvs: false, lBcn: s.engines, lNav: true, lStrb: !s.gnd || s.gs > 30, lLand: !s.gnd,
       simRate: s.rate, slew: s.slew, paused: false, crash: 0, crashOn: !o.extremeImpact,
+      // Like MSFS: every reading carries the LAST touchdown's values (0 at the start of a flight)
+      ...s.td,
       ...extra,
     });
   }
@@ -236,8 +238,14 @@ function buildFlight(options = {}) {
   const tdPitch = 4;
   const tdG = o.extremeImpact ? 4.5 : o.touchdownFpm > 700 ? 2.3 : 1.2;
   s.g = tdG;
-  step(0.1, { tdV: o.extremeImpact ? 2500 : o.touchdownFpm, tdLat: samples[samples.length - 1].lat, tdLon: samples[samples.length - 1].lon, tdPitch, tdBank: 0, crash: o.crashAtTouchdown ? 1 : 0 });
+  const touchPoint = samples[samples.length - 1];
+  // The touchdown frame itself still carries the old touchdown values, like MSFS
+  step(0.1, { crash: o.crashAtTouchdown ? 1 : 0 });
   s.g = 1;
+  step(0.1);
+  // ...and MSFS updates them a moment later
+  s.td = { tdV: o.extremeImpact ? 2500 : o.touchdownFpm, tdLat: touchPoint.lat, tdLon: touchPoint.lon, tdPitch, tdBank: 0 };
+  step(0.1);
 
   for (let b = 0; b < o.bounces; b += 1) {
     s.gnd = false;

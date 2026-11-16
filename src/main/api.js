@@ -71,7 +71,8 @@ function createApi({ fetchImpl, baseUrl = TRAILHEAD_URL, version, osVersion, onU
     takeMission: (id) => post(`/api/missions/${Number(id)}/take`),
     dropMission: (id) => post(`/api/my/mission/${Number(id)}/drop`),
     logbook: (limit, offset) => get(`/api/my/logbook?limit=${Number(limit)}&offset=${Number(offset)}`),
-    report: (id) => get(`/api/flights/${Number(id)}`),
+    // Flight reports use a random 9-character public ID (FR-6)
+    report: (id) => get(`/api/flights/${encodeURIComponent(String(id))}`),
     dismissNotice: (id) => post(`/api/my/notices/${Number(id)}/dismiss`),
     nearestAirports: (lat, lon) => get(`/api/acars/airports/nearest?lat=${Number(lat)}&lon=${Number(lon)}`),
     startFlight: (body) => post("/api/acars/flights", body),

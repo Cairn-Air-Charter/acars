@@ -34,9 +34,14 @@ function createLandingTracker({ ends, light, gateFt }) {
     if (!touchdown) return null;
     const after = recent.filter((s) => s.t >= touchdown.t && s.t <= touchdown.t + 2000);
     const before = recent.filter((s) => s.t < touchdown.t);
-    const tdSample = recent.find((s) => s.t >= touchdown.t && typeof s.tdV === "number");
-    const lastAir = before[before.length - 1];
-    const fpm = tdSample ? tdSample.tdV : lastAir && typeof lastAir.vs === "number" ? -lastAir.vs : null;
+    // MSFS keeps the previous touchdown's values (0 at the start of a flight) and updates them
+    // a moment after the wheels touch. Only values that changed belong to this landing.
+    const last = before[before.length - 1] || {};
+    const tdSample = recent.find((s) => s.t >= touchdown.t && s.t <= touchdown.t + 3000 && typeof s.tdV === "number" && s.tdV > 0 &&
+      (s.tdV !== last.tdV || s.tdLat !== last.tdLat || s.tdLon !== last.tdLon)) || null;
+    // Without it: the steepest descent in the last 1.5 s in the air
+    const sinks = before.filter((s) => s.t >= touchdown.t - 1500 && s.gnd === false && typeof s.vs === "number").map((s) => -s.vs);
+    const fpm = tdSample ? tdSample.tdV : sinks.length ? Math.max(0, ...sinks) : null;
     const g = after.reduce((m, s) => (typeof s.g === "number" ? Math.max(m, s.g) : m), touchdown.g || 1);
     const lat = tdSample && typeof tdSample.tdLat === "number" ? tdSample.tdLat : touchdown.lat;
     const lon = tdSample && typeof tdSample.tdLon === "number" ? tdSample.tdLon : touchdown.lon;

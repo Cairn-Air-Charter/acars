@@ -216,6 +216,21 @@ test("during a resume, slew and teleport don't count (ACR-14)", () => {
 // THE LANDING CARD (ACR-10)
 // ==========================================
 
+test("the landing card never shows MSFS's stale 0 fpm from before the landing (regression)", () => {
+  const flight = buildFlight({ group: "light", touchdownFpm: 180 });
+  // MSFS never updated its touchdown values: the descent just before touchdown is used
+  const samples = flight.samples.map((s) => ({ ...s, tdV: 0, tdLat: 0, tdLon: 0 }));
+  const tracker = createLandingTracker({ ends: [flight.runwayEnd], light: true });
+  const detector = createPhaseDetector({ destination: { code: "ARR", ...flight.arrival }, light: true });
+  for (const s of samples) {
+    tracker.update(s);
+    for (const c of detector.update(s)) if (c.type === "touchdown" && !c.bounce && !c.touchAndGo) tracker.onTouchdown(s);
+  }
+  const r = tracker.result();
+  assert.ok(r.fpm > 100, `got ${r.fpm}`);
+  assert.equal(r.runway, "09"); // the touchdown point is the aircraft's own position, not 0,0
+});
+
 test("the preliminary landing card has rate, G, distance, centerline and bounces (ACR-10)", () => {
   const flight = buildFlight({ group: "light", touchdownPastFt: 1200, touchdownFpm: 220, bounces: 1 });
   const tracker = createLandingTracker({ ends: [flight.runwayEnd], light: true });

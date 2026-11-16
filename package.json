@@ -1,7 +1,7 @@
 {
   "name": "cairn-acars",
   "productName": "Cairn ACARS",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Cairn ACARS: fly Cairn Air Charter missions in MSFS 2020 and MSFS 2024.",
   "author": "Cairn Air Charter",
   "private": true,
