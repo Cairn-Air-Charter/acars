@@ -34,7 +34,9 @@ jobs:
       # The commit this version was built from, shown at the bottom of ACARS (flows/versions.md VER-2)
       - name: Record the commit
         shell: bash
-        run: echo "{\"commit\": \"$GITHUB_SHA\"}" > src/build-info.json
+        # A block (|) so YAML reads the line as plain text; the ": " inside it isn't YAML
+        run: |
+          echo "{\"commit\": \"$GITHUB_SHA\"}" > src/build-info.json
       # Build only. Letting electron-builder publish uploads files in parallel, and each upload
       # can create its own release, so one version ended up split across two releases and
       # ACARS couldn't find latest.yml. One step below creates one release with every file.

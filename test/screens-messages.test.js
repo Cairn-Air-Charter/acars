@@ -178,7 +178,12 @@ test("the commit comes from build-info.json, written by the release workflow; 'd
   assert.equal(releaseNotes.commit(file), null);
   assert.equal(releaseNotes.commit(path.join(dir, "missing.json")), null);
   const release = read(".github/workflows/release.yml");
-  assert.match(release, /run: echo "\{\\"commit\\": \\"\$GITHUB_SHA\\"\}" > src\/build-info\.json/);
+  assert.match(release, /run: \|\r?\n\s+echo "\{\\"commit\\": \\"\$GITHUB_SHA\\"\}" > src\/build-info\.json/);
+  // The workflow file must be valid YAML, or GitHub refuses to run it
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(release);
+  const step = workflow.jobs.release.steps.find((s) => s.name === "Record the commit");
+  assert.equal(step.run.trim(), 'echo "{\\"commit\\": \\"$GITHUB_SHA\\"}" > src/build-info.json');
   assert.ok(release.indexOf("src/build-info.json") < release.indexOf("electron-builder --win"), "written before the build");
   assert.match(read(".gitignore"), /^src\/build-info\.json$/m);
   assert.ok(JSON.parse(read("package.json")).build.files.includes("release-notes.json"));
