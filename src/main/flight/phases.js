@@ -19,6 +19,8 @@ const PHASE_LABELS = {
 
 const LIGHT_CLASSES = new Set(["light_single", "bush", "light_utility"]);
 const PUSHBACK_NONE = 3; // SimConnect PUSHBACK STATE: 3 = no pushback
+const GO_AROUND_BELOW_AFE = 1000; // a go-around's lowest point is below this, above the field
+const BOUNCE_MIN_S = 0.5; // shorter "airborne" blips at touchdown are MSFS's on-ground flag flickering
 const WATER = 2; // SimConnect SURFACE TYPE: water
 
 const num = (v) => typeof v === "number" && Number.isFinite(v);
@@ -159,9 +161,12 @@ function createPhaseDetector(options) {
       }
     } else if (state.airborne) {
       const airTime = (t - state.airborneSince) / 1000;
-      const wasBounce = state.touchdown && airTime < 5 && state.airborneMaxAgl < 15;
+      const flicker = state.touchdown && airTime < BOUNCE_MIN_S;
+      const wasBounce = state.touchdown && !flicker && airTime < 5 && state.airborneMaxAgl < 15;
       state.airborne = false;
-      if (wasBounce) {
+      if (flicker) {
+        // MSFS's on-ground flag often flickers for a moment at touchdown: not a bounce
+      } else if (wasBounce) {
         state.bounces += 1;
         out.push({ type: "touchdown", bounce: true });
       } else if (state.everAirborne && (s.agl === undefined || s.agl <= 5)) {
@@ -182,7 +187,9 @@ function createPhaseDetector(options) {
 
       if (state.phase === "approach" || state.phase === "go_around") {
         if (state.lowestAfe === null || height < state.lowestAfe) state.lowestAfe = height;
-        if (state.phase === "approach" && held("ga", vs > 500 && height - state.lowestAfe >= 300, 10, t)) {
+        // A go-around starts low on the approach (below 1,000 ft above the field). Climbing back
+        // to circuit height afterwards, or a step-climb higher up, isn't another go-around.
+        if (state.phase === "approach" && held("ga", vs > 500 && state.lowestAfe < GO_AROUND_BELOW_AFE && height - state.lowestAfe >= 300, 10, t)) {
           state.goArounds += 1;
           state.lowestAfe = null;
           set("go_around");

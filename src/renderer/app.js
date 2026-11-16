@@ -460,6 +460,11 @@ async function openReport(id) {
     { code: r.route.departure.code, lat: r.route.departure.lat, lon: r.route.departure.lon },
     { code: r.route.arrival.code, lat: r.route.arrival.lat, lon: r.route.arrival.lon },
   ]);
+  // Altitude and speed for the whole flight (same charts as the website)
+  const altitudeFlight = el("div", { className: "chart" });
+  const speedFlight = el("div", { className: "chart" });
+  box.append(section("Altitude", altitudeFlight), section("Speed", speedFlight));
+  FlightCharts.flight({ altitude: altitudeFlight, speed: speedFlight }, r.charts && r.charts.flight);
   if (r.timeline && r.timeline.length) {
     box.append(section("Flight events", el("ol", { className: "feed" }, r.timeline.map((t) => el("li", {}, el("time", {}, CairnTime.formatTime(t.at)), t.message || t.phase || t.type)))));
   }

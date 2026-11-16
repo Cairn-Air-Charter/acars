@@ -36,13 +36,13 @@ const COMMON = [
   ["BRAKE PARKING INDICATOR", "bool", "i", "pbrkInd", "bool"],
   ["PUSHBACK STATE", "enum", "i", "push"],
   ["GEAR HANDLE POSITION", "bool", "i", "gearH", "bool"],
-  ["GEAR TOTAL PCT EXTENDED", "percent", "f", "gear"],
+  ["GEAR TOTAL PCT EXTENDED", "percent over 100", "f", "gear", "pct"],
   ["IS GEAR RETRACTABLE", "bool", "i", "gearRet", "bool"],
   ["IS GEAR FLOATS", "bool", "i", "floats", "bool"],
   ["FLAPS HANDLE INDEX", "number", "i", "flapsIdx"],
-  ["FLAPS HANDLE PERCENT", "percent", "f", "flaps"],
-  ["TRAILING EDGE FLAPS LEFT PERCENT", "percent", "f", "flapsTe"],
-  ["SPOILERS HANDLE POSITION", "percent", "f", "spl"],
+  ["FLAPS HANDLE PERCENT", "percent over 100", "f", "flaps", "pct"],
+  ["TRAILING EDGE FLAPS LEFT PERCENT", "percent over 100", "f", "flapsTe", "pct"],
+  ["SPOILERS HANDLE POSITION", "percent over 100", "f", "spl", "pct"],
   ["SPOILERS ARMED", "bool", "i", "splArm", "bool"],
   ["NUMBER OF ENGINES", "number", "i", "nEng"],
   ["ENGINE TYPE", "enum", "i", "engType"],
@@ -112,9 +112,9 @@ const COMMON = [
 const ENGINE_VARS = [
   ["GENERAL ENG COMBUSTION", "bool", "i", "c", "bool"],
   ["GENERAL ENG RPM", "rpm", "f", "rpm"],
-  ["TURB ENG N1", "percent", "f", "n1"],
-  ["TURB ENG N2", "percent", "f", "n2"],
-  ["GENERAL ENG THROTTLE LEVER POSITION", "percent", "f", "thr"],
+  ["TURB ENG N1", "percent over 100", "f", "n1", "pct"],
+  ["TURB ENG N2", "percent over 100", "f", "n2", "pct"],
+  ["GENERAL ENG THROTTLE LEVER POSITION", "percent over 100", "f", "thr", "pct"],
   ["ENG FUEL FLOW GPH", "gallons per hour", "f", "_gph"],
   ["TURB ENG FUEL FLOW PPH", "pounds per hour", "f", "_pph"],
   ["GENERAL ENG FAILED", "bool", "i", "fail", "bool"],
@@ -159,6 +159,8 @@ function buildSample(variables, values, t) {
     else if (v.convert === "flip") value = -value;
     else if (v.convert === "heading") value = ((value % 360) + 360) % 360;
     else if (v.convert === "fpsToFpm") value = Math.abs(value) * 60;
+    // Positions are asked for as a fraction (0 to 1), which MSFS defines exactly, and shown as 0-100%
+    else if (v.convert === "pct") value = Math.round(value * 1000) / 10;
     if (v.engine !== undefined) {
       engines[v.engine] = engines[v.engine] || {};
       engines[v.engine][v.field] = value;

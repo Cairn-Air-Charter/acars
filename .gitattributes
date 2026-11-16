@@ -1,0 +1,6 @@
+# Keep one kind of line ending (LF) everywhere, including on GitHub's Windows build machine,
+# so tests that read files behave the same on every computer.
+* text=auto eol=lf
+*.ico binary
+*.png binary
+*.ttf binary

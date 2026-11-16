@@ -166,6 +166,101 @@
   }
 
   // ==========================================
+  // THE WHOLE FLIGHT (against time)
+  // ==========================================
+
+  const SECOND_LINE = "var(--color-text)"; // the second series: a dashed Bone line, named in the legend
+
+  /**
+   * One chart against time. series: [{ label, points: [[seconds, value], ...], dashed }] — one
+   * or two series sharing one unit (never two different units on one chart). start: the time
+   * (ms) of second 0, shown in the reader's local time with the shared helper (GEN-8).
+   */
+  function timeChart(container, series, opts) {
+    const all = series.map((s) => ({ ...s, points: (s.points || []).filter((p) => Number.isFinite(p[0]) && Number.isFinite(p[1])) }));
+    const pts = all.flatMap((s) => s.points);
+    if (pts.length < 2) {
+      container.textContent = `No ${opts.label.toLowerCase()} data.`;
+      return;
+    }
+    const W = 640;
+    const H = 220;
+    const m = { l: 60, r: 16, t: series.length > 1 ? 30 : 16, b: 34 };
+    const xMin = Math.min(...pts.map((p) => p[0]));
+    const xMax = Math.max(...pts.map((p) => p[0]));
+    let yMin = Math.min(0, ...pts.map((p) => p[1]));
+    let yMax = Math.max(...pts.map((p) => p[1]));
+    if (yMax === yMin) yMax += 1;
+    const sx = (v) => m.l + ((v - xMin) / (xMax - xMin || 1)) * (W - m.l - m.r);
+    const sy = (v) => H - m.b - ((v - yMin) / (yMax - yMin)) * (H - m.t - m.b);
+    const clock = (sec) => (root && root.CairnTime ? root.CairnTime.formatTime(opts.start + sec * 1000) : `${Math.round(sec / 60)} min`);
+
+    const box = canvas(container, W, H, `${opts.label} over the whole flight`);
+    for (const t of niceTicks(yMin, yMax, 4)) {
+      svg("line", { x1: m.l, x2: W - m.r, y1: sy(t), y2: sy(t), stroke: GRID, "stroke-width": 1 }, box);
+      text(box, m.l - 6, sy(t) + 4, fmt(t), { "text-anchor": "end", fill: MUTED, "font-size": 11 });
+    }
+    for (const t of niceTicks(xMin, xMax, 5)) {
+      text(box, sx(t), H - m.b + 16, clock(t), { "text-anchor": "middle", fill: MUTED, "font-size": 11 });
+    }
+    all.forEach((s, i) => {
+      if (s.points.length < 2) return;
+      const d = s.points.map((p, k) => `${k ? "L" : "M"}${sx(p[0]).toFixed(1)} ${sy(p[1]).toFixed(1)}`).join(" ");
+      svg("path", { d, fill: "none", stroke: i === 0 ? LINE : SECOND_LINE, "stroke-width": 2, "stroke-dasharray": s.dashed ? "6 4" : "none", "stroke-linejoin": "round", "stroke-linecap": "round" }, box);
+    });
+    // Legend whenever there are two series, so a line is never told apart by color alone
+    if (all.length > 1) {
+      let x = m.l;
+      all.forEach((s, i) => {
+        svg("line", { x1: x, x2: x + 22, y1: 12, y2: 12, stroke: i === 0 ? LINE : SECOND_LINE, "stroke-width": 2, "stroke-dasharray": s.dashed ? "6 4" : "none" }, box);
+        text(box, x + 28, 16, s.label, { "font-size": 12 });
+        x += 40 + s.label.length * 7;
+      });
+    }
+
+    // Hover: a crosshair and every series' value at that time
+    const cross = svg("line", { y1: m.t, y2: H - m.b, stroke: TEXT, "stroke-width": 1, visibility: "hidden" }, box);
+    const tip = text(box, 0, m.t + 12, "", { visibility: "hidden", "font-weight": 600 });
+    const hit = svg("rect", { x: m.l, y: m.t, width: W - m.l - m.r, height: H - m.t - m.b, fill: "transparent" }, box);
+    hit.addEventListener("pointermove", (event) => {
+      const rect = box.getBoundingClientRect();
+      const x = xMin + (((event.clientX - rect.left) / rect.width) * W - m.l) / (W - m.l - m.r) * (xMax - xMin);
+      const values = all.map((s) => {
+        let best = s.points[0];
+        for (const p of s.points) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p;
+        return best;
+      }).filter(Boolean);
+      if (!values.length) return;
+      cross.setAttribute("x1", sx(values[0][0]));
+      cross.setAttribute("x2", sx(values[0][0]));
+      tip.textContent = `${clock(values[0][0])}: ${values.map((v, i) => `${all.length > 1 ? `${all[i].label} ` : ""}${fmt(v[1])} ${opts.unit}`).join(", ")}`;
+      tip.setAttribute("x", Math.min(sx(values[0][0]) + 8, W - 260));
+      cross.setAttribute("visibility", "visible");
+      tip.setAttribute("visibility", "visible");
+    });
+    hit.addEventListener("pointerleave", () => {
+      cross.setAttribute("visibility", "hidden");
+      tip.setAttribute("visibility", "hidden");
+    });
+  }
+
+  /** flight: { start, points: [[seconds, altitudeFt, groundSpeedKt, indicatedKt], ...] } -> two charts */
+  function flight(containers, profile) {
+    if (!profile || !profile.points) {
+      for (const c of [containers.altitude, containers.speed]) if (c) c.textContent = "The whole-flight charts come with the hourly check.";
+      return;
+    }
+    const p = profile.points;
+    if (containers.altitude) timeChart(containers.altitude, [{ label: "Altitude", points: p.map((x) => [x[0], x[1]]) }], { label: "Altitude", unit: "ft", start: profile.start });
+    if (containers.speed) {
+      timeChart(containers.speed, [
+        { label: "Ground speed", points: p.map((x) => [x[0], x[2]]) },
+        { label: "Indicated airspeed", points: p.map((x) => [x[0], x[3]]), dashed: true },
+      ], { label: "Speed", unit: "kt", start: profile.start });
+    }
+  }
+
+  // ==========================================
   // RUNWAY DRAWING
   // ==========================================
 
@@ -205,7 +300,7 @@
     if (r.ident) text(box, sx(0) + 4, top + height / 2 + 4, r.ident, { "font-weight": 600 });
   }
 
-  const FlightCharts = { track, approach, lineChart, runway, niceTicks };
+  const FlightCharts = { track, approach, lineChart, timeChart, flight, runway, niceTicks };
   if (typeof module !== "undefined" && module.exports) module.exports = FlightCharts;
   if (root) root.FlightCharts = FlightCharts;
 })(typeof window !== "undefined" ? window : null);

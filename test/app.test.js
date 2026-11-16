@@ -344,7 +344,9 @@ test("the Flight screen shows the mission, Out/Off/On/In and flight events; mess
   const app = read("src/renderer/app.js");
   assert.match(app, /function chime\(\)/); // the new-message chime stays
   // The live numbers are a short, fixed list updated in place, so the card never changes size
-  assert.match(app, /\["To go", .*\],\n\s+\["ETE", .*\],\n\s+\["Ground speed", .*\],\n\s+\["Fuel on board", .*\],/);
+  // \r? because GitHub's Windows build machine may check files out with CRLF line endings
+  assert.match(app, /\["To go", .*\],\r?\n\s+\["ETE", .*\],\r?\n\s+\["Ground speed", .*\],\r?\n\s+\["Fuel on board", .*\],/);
+  assert.match(app.replace(/\n/g, "\r\n"), /\["To go", .*\],\r?\n\s+\["ETE", .*\],\r?\n\s+\["Ground speed", .*\],\r?\n\s+\["Fuel on board", .*\],/);
   assert.match(read("src/renderer/styles.css"), /\.now dd \{[^}]*tabular-nums[^}]*white-space: nowrap/);
 });
 

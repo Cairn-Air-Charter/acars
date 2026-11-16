@@ -71,6 +71,46 @@ test("a touch-and-go is a landing and a new takeoff in the same flight (ACR-11)"
   assert.equal(d.phase, "climb");
 });
 
+test("a split-second on-ground flicker at touchdown isn't a bounce (regression)", () => {
+  const flight = buildFlight({ group: "light" });
+  const td = flight.samples.findIndex((s, i) => i > 0 && s.gnd === true && flight.samples[i - 1].gnd === false && s.ph === "landed");
+  // One quick reading "airborne" right after touchdown, like MSFS's flag flickering
+  const samples = flight.samples.map((s, i) => (i === td + 3 ? { ...s, gnd: false } : s));
+  const d = createPhaseDetector({ destination: { code: "ARR", ...flight.arrival }, light: true });
+  for (const s of samples) d.update(s);
+  assert.equal(d.counts.bounces, 0);
+  assert.equal(d.counts.touchAndGoes, 0);
+});
+
+test("only one go-around is counted when the climb back to the circuit is followed by another climb (regression)", () => {
+  const d = createPhaseDetector({ destination: { code: "ARR", lat: 45, lon: -100, elevationFt: 0 }, light: false });
+  let t = 0;
+  const fly = (fromFt, toFt, seconds) => {
+    for (let i = 0; i < seconds; i += 1) {
+      const alt = fromFt + ((toFt - fromFt) * i) / seconds;
+      const vs = ((toFt - fromFt) / seconds) * 60;
+      d.update({ t: (t += 1000), lat: 45, lon: -100.05, alt, agl: alt, gnd: false, gs: 120, vs, gear: 100, flapsIdx: 2, eng: [{ c: true }] });
+    }
+  };
+  d.update({ t: (t += 1000), lat: 45, lon: -101, alt: 0, agl: 0, gnd: true, rwy: true, gs: 50, eng: [{ c: true }] });
+  fly(10, 3000, 300); // takeoff and climb
+  fly(3000, 2000, 120); // descending toward the field: approach
+  fly(2000, 400, 120); // down to 400 ft
+  fly(400, 1500, 60); // the go-around
+  fly(1500, 1500, 40); // level in the circuit
+  fly(1500, 1400, 20); // a small descent
+  fly(1400, 2500, 70); // climbing again, well above 1,000 ft: not a go-around
+  assert.equal(d.counts.goArounds, 1);
+});
+
+test("gear, flaps and engine positions are read as 0-1 and shown as 0-100% (regression)", () => {
+  const vars = require("../src/main/sim/variables");
+  const gearVar = vars.sampleVariables().find((v) => v.name === "GEAR TOTAL PCT EXTENDED");
+  assert.equal(gearVar.units, "percent over 100");
+  const s = vars.buildSample([{ name: "PLANE LATITUDE", type: "f", field: "lat" }, { name: "PLANE LONGITUDE", type: "f", field: "lon" }, gearVar], [45, -100, 1], 1);
+  assert.equal(s.gear, 100);
+});
+
 test("pushback is found from moving backward, and from the pushback state (ACR-11)", () => {
   const d = createPhaseDetector({ light: false });
   let t = 0;
