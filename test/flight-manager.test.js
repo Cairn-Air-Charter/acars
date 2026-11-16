@@ -108,7 +108,7 @@ test("a whole flight: started, reported about once a minute, phases sent as even
   assert.equal(arrival.kind, "planned");
   const filed = await ctx.manager.file(null);
   assert.equal(filed.ok, true);
-  assert.equal(filed.message, "Report sent. You're now at ARR. It's checked automatically at the top of the hour.");
+  assert.equal(filed.message, "Report sent. You're now at ARR.");
   const body = ctx.server.submits[0];
   assert.ok(body.oooi.out && body.oooi.off && body.oooi.on && body.oooi.in);
   assert.equal(body.landing.fpm, 150);

@@ -27,6 +27,15 @@ contextBridge.exposeInMainWorld("acars", {
   logbook: call("logbook:get"),
   report: call("report:get"),
   dismissNotice: call("notices:dismiss"),
+  // Messages and optional notices (flows/messages.md)
+  messages: call("messages:list"),
+  message: call("messages:get"),
+  sendMessage: call("messages:send"),
+  reply: call("messages:reply"),
+  archive: call("messages:archive"),
+  recipients: call("messages:recipients"),
+  notices: call("notices:get"),
+  saveNotices: call("notices:save"),
   // Simulator and flying (ACR-8 to ACR-16)
   simStatus: call("sim:status"),
   testSim: call("sim:test"),
@@ -43,6 +52,7 @@ contextBridge.exposeInMainWorld("acars", {
   appInfo: call("app:info"),
   checkForUpdates: call("app:checkUpdates"),
   sendDiagnostics: call("app:diagnostics"),
+  changes: call("app:changes"),
   openInBrowser: call("app:openExternal"),
   // Subscribe to updates from the main process; returns an unsubscribe function
   on(event, handler) {

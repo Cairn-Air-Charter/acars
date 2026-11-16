@@ -23,11 +23,26 @@ const GENERIC_ERROR = "Something went wrong on our end. Try again in a minute. I
  * fetchImpl: the session's fetch (session.fromPartition(...).fetch) or a fake in tests.
  * onUnauthorized: called whenever Trailhead answers 401 (the session ended, TH-3).
  */
+/**
+ * The diagnostics note, cut to 500 whole characters (never half an emoji) and URL-encoded.
+ * Anything that still can't be encoded is replaced, so the upload never fails over a note.
+ */
+function encodeNote(note) {
+  const text = Array.from(String(note)).slice(0, 500).join("");
+  return encodeURIComponent(text.toWellFormed ? text.toWellFormed() : text.replace(/[\uD800-\uDFFF]/g, "\uFFFD"));
+}
+
+/** A message's public ID, or a placeholder the server answers 404 to. */
+function messageId(id) {
+  const text = String(id || "");
+  return /^[a-z0-9]{9}$/.test(text) ? text : "not-found";
+}
+
 function createApi({ fetchImpl, baseUrl = TRAILHEAD_URL, version, osVersion, onUnauthorized = () => {} }) {
   const userAgent = `CairnACARS/${version} (Windows ${osVersion})`;
 
-  async function request(method, path, { json, body, contentType } = {}) {
-    const headers = { "User-Agent": userAgent, "X-Cairn-ACARS-Version": version, Accept: "application/json" };
+  async function request(method, path, { json, body, contentType, extraHeaders } = {}) {
+    const headers = { ...(extraHeaders || {}), "User-Agent": userAgent, "X-Cairn-ACARS-Version": version, Accept: "application/json" };
     let payload;
     if (json !== undefined) {
       headers["Content-Type"] = "application/json";
@@ -81,7 +96,23 @@ function createApi({ fetchImpl, baseUrl = TRAILHEAD_URL, version, osVersion, onU
     submit: (id, body) => post(`/api/acars/flights/${Number(id)}/submit`, body),
     uploadData: (id, buffer) => request("PUT", `/api/acars/flights/${Number(id)}/data`, { body: buffer, contentType: "application/gzip" }),
     cancel: (id) => post(`/api/acars/flights/${Number(id)}/cancel`),
-    diagnostics: (zip) => request("POST", "/api/acars/diagnostics", { body: zip, contentType: "application/zip" }),
+    // The pilot's optional note goes in a header, URL-encoded (flows/messages.md MSG-7)
+    diagnostics: (zip, note) =>
+      request("POST", "/api/acars/diagnostics", {
+        body: zip,
+        contentType: "application/zip",
+        extraHeaders: note ? { "X-Cairn-Diagnostics-Note": encodeNote(note) } : undefined,
+      }),
+    // Messages: the same routes as Trailhead's Messages page (flows/messages.md MSG-9).
+    // Message IDs are random 9-character public IDs.
+    messages: (box, offset) => get(`/api/messages?box=${encodeURIComponent(box)}&offset=${Number(offset) || 0}`),
+    message: (id) => get(`/api/messages/${messageId(id)}`),
+    sendMessage: ({ to, subject, body }) => post("/api/messages", { to, subject, body }),
+    reply: (id, body) => post(`/api/messages/${messageId(id)}/reply`, { body }),
+    archive: (id, archived) => post(`/api/messages/${messageId(id)}/${archived ? "archive" : "unarchive"}`),
+    recipients: () => get("/api/messages/recipients"),
+    subscriptions: () => get("/api/my/subscriptions"),
+    saveSubscriptions: (subscriptions) => request("PUT", "/api/my/subscriptions", { json: { subscriptions } }),
   };
 }
 

@@ -23,7 +23,8 @@ const MESSAGES = {
   lostSim: "Lost MSFS. Your flight is saved. Reload the aircraft where you were and ACARS will pick back up.",
   resumed: (minutes) => `Resumed after a simulator disconnect (${minutes} min).`,
   crash: (departure) => `Looks like that one ended in a crash. The flight isn't credited and you're still at ${departure}. The leg's still on your mission whenever you want to try again.`,
-  filed: (arrival) => `Report sent. You're now at ${arrival}. It's checked automatically at the top of the hour.`,
+  // Shown on Home only; no message is sent when a report is filed (ACR-16)
+  filed: (arrival) => `Report sent. You're now at ${arrival}.`,
   offline: "You're offline. Your flight is safe; send the report again when you're back online.",
   notAtAirport: "You're not at an airport. What happened?",
   diverted: (actual, name, planned) => `You're at ${actual} (${name}), not ${planned}. What happened?`,

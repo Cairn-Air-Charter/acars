@@ -1,0 +1,15 @@
+[
+  {
+    "date": "2026-11-16",
+    "notes": [
+      "Mission details now open right below the mission you click, instead of at the bottom of the window.",
+      "The mission filters are laid out evenly, with the current-airport checkbox on its own row.",
+      "The top bar shows your name only.",
+      "Messages is now your full Cairn inbox, the same as Trailhead: read conversations, reply to staff, archive, and write to staff yourself.",
+      "Choose extra notices under Settings, and add a note when you send diagnostics.",
+      "The logbook is a simple table; View report opens the full report in your browser.",
+      "Missions and the logbook show each airport's town and region next to its code.",
+      "The bottom of the window shows your version. Click the commit to see what changed."
+    ]
+  }
+]

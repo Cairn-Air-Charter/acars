@@ -355,13 +355,13 @@ test("the stylesheet uses only the brand tokens: no hex colors outside tokens.cs
   assert.match(read("src/renderer/index.html"), /src="assets\/cairn-primary-dark\.png" alt="Cairn Air Charter" width="180"/);
 });
 
-test("Trailhead's shared files are identical copies (sample fields, charts, dates, tokens, test flights)", (t) => {
+test("Trailhead's shared files are identical copies (sample fields, places, dates, tokens, test flights)", (t) => {
   const trailhead = path.join(ROOT, "..", "trailhead");
   const props = path.join(ROOT, "..", "coding-properties");
   if (!fs.existsSync(trailhead) || !fs.existsSync(props)) return t.skip("trailhead and coding-properties aren't next to this repository");
   const pairs = [
     ["src/shared/sample-fields.js", path.join(trailhead, "acars", "sample-fields.js")],
-    ["src/renderer/flight-charts.js", path.join(trailhead, "public", "flight-charts.js")],
+    ["src/renderer/places.js", path.join(trailhead, "public", "places.js")],
     ["src/renderer/datetime.js", path.join(trailhead, "public", "datetime.js")],
     ["test/helpers/synthetic-flight.js", path.join(trailhead, "test", "helpers", "synthetic-flight.js")],
     ["src/renderer/tokens.css", path.join(props, "tokens.css")],

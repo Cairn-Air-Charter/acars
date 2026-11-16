@@ -18,6 +18,7 @@ const { flightFilePath, pruneFlightFiles } = require("./flight/recorder");
 const { createSimConnection } = require("./sim/simconnect");
 const { createUpdater } = require("./updater");
 const { isAllowedExternal } = require("./links");
+const releaseNotes = require("./release-notes");
 
 const SYNC_EVERY_MS = 3 * 60 * 1000; // ACR-4
 const OFFLINE_RETRY_MS = 30 * 1000;
@@ -351,6 +352,17 @@ if (!app.requestSingleInstanceLock()) {
     handle("report:get", (id) => api.report(id));
     handle("notices:dismiss", (id) => api.dismissNotice(id));
 
+    // Messages: the same inbox as Trailhead's Messages page (flows/messages.md MSG-5)
+    handle("messages:list", ({ box, offset } = {}) => api.messages(["inbox", "sent", "archived"].includes(box) ? box : "inbox", offset));
+    handle("messages:get", (id) => api.message(id));
+    handle("messages:send", (message) => api.sendMessage(message || {}));
+    handle("messages:reply", ({ id, body } = {}) => api.reply(id, body));
+    handle("messages:archive", ({ id, archived } = {}) => api.archive(id, archived === true));
+    handle("messages:recipients", () => api.recipients());
+    // Optional notices: the same setting as the Trailhead profile (MSG-2)
+    handle("notices:get", () => api.subscriptions());
+    handle("notices:save", (subscriptions) => api.saveSubscriptions(subscriptions || {}));
+
     handle("sim:status", () => sim.status());
     handle("sim:test", () => sim.retryNow());
 
@@ -417,16 +429,18 @@ if (!app.requestSingleInstanceLock()) {
       }
       return prefs.visible();
     });
-    handle("app:info", () => ({ version, logsFolder: logger.folder, trailhead: api.baseUrl, update: updater ? updater.state() : null }));
+    handle("app:info", () => ({ version, commit: releaseNotes.commit(), logsFolder: logger.folder, trailhead: api.baseUrl, update: updater ? updater.state() : null }));
+    // What changed (flows/versions.md VER-3): the notes that shipped with this version
+    handle("app:changes", () => ({ ok: true, version, commit: releaseNotes.commit(), entries: releaseNotes.load() }));
     handle("app:checkUpdates", () => updater.checkNow());
     handle("app:openExternal", (url) => {
       if (!isAllowedExternal(url)) return { ok: false };
       shell.openExternal(url);
       return { ok: true };
     });
-    handle("app:diagnostics", async () => {
+    handle("app:diagnostics", async (note) => {
       const zip = buildDiagnostics(logger, flights.view(), { version, os: os.release(), sim: sim.status(), outboxWaiting: outbox.size });
-      const result = await api.diagnostics(zip);
+      const result = await api.diagnostics(zip, typeof note === "string" ? note.trim() : "");
       logger.info("diagnostics_sent", { ok: result.ok });
       return result.ok ? { ok: true, message: result.data.message } : { ok: false, error: result.error };
     });

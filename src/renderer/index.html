@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="tokens.css">
     <link rel="stylesheet" href="styles.css">
     <script src="datetime.js" defer></script>
-    <script src="flight-charts.js" defer></script>
+    <script src="places.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
@@ -57,6 +57,8 @@
       <main class="content">
         <!-- Home -->
         <section id="homeView" class="view" hidden>
+          <!-- "Report sent." is shown here only; no message is sent when a report is filed (ACR-16) -->
+          <p id="filedLine" class="message message-success" role="status" hidden></p>
           <div id="notices" class="stack"></div>
           <section class="card stack" aria-labelledby="missionHeading">
             <div class="card-head">
@@ -85,33 +87,36 @@
 
         <!-- Missions (ACR-6) -->
         <section id="missionsView" class="view" hidden>
-          <form id="missionFilters" class="filters">
-            <label class="field">Type <select id="fType"><option value="">Any type</option></select></label>
-            <label class="field">Aircraft <select id="fAircraft"><option value="">Any aircraft</option></select></label>
-            <label class="field">Class <select id="fClass"><option value="">Any class</option></select></label>
-            <label class="field">Simulator <select id="fSim"><option value="">Any simulator</option></select></label>
-            <label class="field">Region <select id="fContinent"><option value="">Anywhere</option></select></label>
-            <label class="field">Country <select id="fCountry"><option value="">Any country</option></select></label>
-            <label class="field">Departs from <input type="text" id="fDeparture" maxlength="16" placeholder="Airport code"></label>
-            <label class="field">Sort
-              <select id="fSort">
-                <option value="newest">Newest</option>
-                <option value="expiring">Expiring soonest</option>
-                <option value="shortest">Shortest</option>
-                <option value="longest">Longest</option>
-                <option value="nearest">Nearest to my airport</option>
-              </select>
-            </label>
-            <label class="check"><input type="checkbox" id="fFromHere"> Departs from my current airport</label>
-            <button type="submit" class="button button-primary">Search</button>
+          <!-- Fields in an even grid; the checkbox and Search each get a row of their own (brand.md → Spacing) -->
+          <form id="missionFilters" class="card filters">
+            <div class="filter-grid">
+              <label class="field">Type <select id="fType"><option value="">Any type</option></select></label>
+              <label class="field">Aircraft <select id="fAircraft"><option value="">Any aircraft</option></select></label>
+              <label class="field">Class <select id="fClass"><option value="">Any class</option></select></label>
+              <label class="field">Simulator <select id="fSim"><option value="">Any simulator</option></select></label>
+              <label class="field">Region <select id="fContinent"><option value="">Anywhere</option></select></label>
+              <label class="field">Country <select id="fCountry"><option value="">Any country</option></select></label>
+              <label class="field">Departs from <input type="text" id="fDeparture" maxlength="16" placeholder="Airport code"></label>
+              <label class="field">Sort
+                <select id="fSort">
+                  <option value="newest">Newest</option>
+                  <option value="expiring">Expiring soonest</option>
+                  <option value="shortest">Shortest</option>
+                  <option value="longest">Longest</option>
+                  <option value="nearest">Nearest to my airport</option>
+                </select>
+              </label>
+            </div>
+            <label class="check filter-row"><input type="checkbox" id="fFromHere"> Departs from my current airport</label>
+            <div class="actions"><button type="submit" class="button button-primary">Search</button></div>
           </form>
+          <!-- A mission's details open right below the mission clicked (ACR-6) -->
           <ul id="missionList" class="rows"></ul>
           <div class="pager">
             <button type="button" class="button button-secondary" id="missionsPrev" disabled>Previous</button>
             <span id="missionsPage" class="muted"></span>
             <button type="button" class="button button-secondary" id="missionsNext" disabled>Next</button>
           </div>
-          <section id="missionDetail" class="card stack" hidden></section>
         </section>
 
         <!-- Logbook (ACR-7) -->
@@ -121,17 +126,20 @@
             <dl class="facts" id="logTotals"></dl>
             <p class="muted">Only approved flights count. Repositions never do. Flight hours are block time.</p>
           </section>
-          <div class="table-wrap"><table class="table">
-            <thead><tr><th>Date</th><th>Type</th><th>Route</th><th>Aircraft</th><th>Block time</th><th>Distance</th><th>Status</th></tr></thead>
-            <tbody id="logRows"></tbody>
-          </table></div>
-          <p id="logEmpty" class="muted" hidden>No flights logged yet. Your first one will show up here.</p>
-          <div class="pager">
-            <button type="button" class="button button-secondary" id="logPrev" disabled>Previous</button>
-            <span id="logPage" class="muted"></span>
-            <button type="button" class="button button-secondary" id="logNext" disabled>Next</button>
-          </div>
-          <section id="reportView" class="card stack" hidden></section>
+          <!-- A table only; reports open on Trailhead in the browser (ACR-7) -->
+          <section class="card stack">
+            <h2>Entries</h2>
+            <div class="table-wrap"><table class="table">
+              <thead><tr><th>Date</th><th>Type</th><th>From</th><th>To</th><th>Aircraft</th><th>Block time</th><th>Distance</th><th>Status</th><th>Report</th></tr></thead>
+              <tbody id="logRows"></tbody>
+            </table></div>
+            <p id="logEmpty" class="muted" hidden>No flights logged yet. Your first one will show up here.</p>
+            <div class="pager">
+              <button type="button" class="button button-secondary" id="logPrev" disabled>Previous</button>
+              <span id="logPage" class="muted"></span>
+              <button type="button" class="button button-secondary" id="logNext" disabled>Next</button>
+            </div>
+          </section>
         </section>
 
         <!-- Settings (ACR-17) -->
@@ -140,7 +148,17 @@
             <h2>Account</h2>
             <p id="accountWho"></p>
             <label class="check"><input type="checkbox" id="sRemember"> Remember me on this PC</label>
+            <p class="muted">ACARS keeps you logged in for 30 days from the last time you use it, like a browser. With this on, ACARS also saves your password on this PC (encrypted for your Windows account), so it can log you back in by itself when that runs out or after you're logged out from the website.</p>
             <div><button type="button" class="button button-secondary" id="logoutButton">Log out</button></div>
+          </section>
+          <section class="card stack">
+            <h2>Notices</h2>
+            <p class="muted" id="alwaysOnLine">Messages from staff and the results of your own flights always come through.</p>
+            <div class="stack" id="alwaysOnList"></div>
+            <h3>Extra notices you can turn on</h3>
+            <div class="stack" id="optionalList"></div>
+            <p id="noticesMessage" role="status" hidden></p>
+            <div><button type="button" class="button button-primary" id="saveNotices">Save notices</button></div>
           </section>
           <section class="card stack">
             <h2>Simulator</h2>
@@ -165,6 +183,9 @@
           <section class="card stack">
             <h2>Diagnostics</h2>
             <p class="muted">If something isn't working, send the last 3 days of ACARS logs to staff. They never include your password or personal details.</p>
+            <label class="field">What's going wrong? (optional)
+              <textarea id="diagnosticsNote" rows="3" maxlength="500"></textarea>
+            </label>
             <p id="diagnosticsMessage" role="status" hidden></p>
             <div><button type="button" class="button button-secondary" id="sendDiagnostics">Send diagnostics</button></div>
           </section>
@@ -208,12 +229,78 @@
         <!-- Messages: Trailhead notices and messages from Cairn -->
         <section id="messagesView" class="view" hidden>
           <section class="card stack">
-            <h2>ACARS messages</h2>
-            <p class="muted">Messages from Cairn, such as flight report approvals and notes from staff. Dismissing one dismisses it on the website too.</p>
+            <div class="card-head">
+              <h2>Messages</h2>
+              <button type="button" class="button button-primary" id="newMessage">New message</button>
+            </div>
+            <p class="muted">The same messages as Trailhead: flight report results, notes from staff, and the notices you chose. Reading or archiving one here does the same on the website.</p>
+            <p id="messagesNotice" class="message message-success" role="status" hidden></p>
+            <div class="boxes" role="tablist" aria-label="Message lists">
+              <button type="button" class="box" role="tab" data-box="inbox" aria-selected="true">Inbox</button>
+              <button type="button" class="box" role="tab" data-box="sent" aria-selected="false">Sent</button>
+              <button type="button" class="box" role="tab" data-box="archived" aria-selected="false">Archived</button>
+            </div>
             <ul class="rows" id="messageList"></ul>
+            <div class="pager">
+              <button type="button" class="button button-secondary" id="messagesPrev" disabled>Previous</button>
+              <span id="messagesPage" class="muted"></span>
+              <button type="button" class="button button-secondary" id="messagesNext" disabled>Next</button>
+            </div>
           </section>
         </section>
       </main>
+      <!-- The running version; the commit ID opens What changed (flows/versions.md VER-1) -->
+      <footer class="versionbar">
+        <span id="versionText">Cairn ACARS</span>
+        <button type="button" class="link-button" id="versionCommit" hidden></button>
+      </footer>
+    </div>
+
+    <!-- One conversation (flows/messages.md MSG-5) -->
+    <div id="threadPanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="threadHeading" hidden>
+      <div class="panel-card stack">
+        <div class="card-head">
+          <h2 id="threadHeading">Message</h2>
+          <button type="button" class="button button-secondary" id="threadClose">Close</button>
+        </div>
+        <ol id="threadList" class="thread"></ol>
+        <div id="threadLink"></div>
+        <form id="replyForm" class="stack" hidden>
+          <label class="field">Reply
+            <textarea id="replyBody" rows="4" maxlength="4000"></textarea>
+          </label>
+          <p id="replyError" class="message message-error" role="alert" hidden></p>
+          <div class="actions"><button type="submit" class="button button-primary">Send reply</button></div>
+        </form>
+        <div class="actions"><button type="button" class="button button-secondary" id="archiveButton">Archive</button></div>
+      </div>
+    </div>
+
+    <!-- Writing to staff (flows/messages.md MSG-4) -->
+    <div id="composePanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="composeHeading" hidden>
+      <div class="panel-card stack">
+        <h2 id="composeHeading">New message to staff</h2>
+        <label class="field">To <select id="composeTo"></select></label>
+        <label class="field">Subject (optional) <input type="text" id="composeSubject" maxlength="120"></label>
+        <label class="field">Message <textarea id="composeBody" rows="6" maxlength="4000"></textarea></label>
+        <p id="composeError" class="message message-error" role="alert" hidden></p>
+        <div class="actions">
+          <button type="button" class="button button-primary" id="composeSend">Send message</button>
+          <button type="button" class="button button-secondary" id="composeClose">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- What changed (flows/versions.md VER-3) -->
+    <div id="changesPanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="changesHeading" hidden>
+      <div class="panel-card stack">
+        <div class="card-head">
+          <h2 id="changesHeading">What changed</h2>
+          <button type="button" class="button button-secondary" id="changesClose">Close</button>
+        </div>
+        <p id="changesIntro"></p>
+        <ol id="changesList" class="changes"></ol>
+      </div>
     </div>
 
     <!-- Pre-flight checklist (ACR-9) -->

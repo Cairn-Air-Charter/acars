@@ -30,3 +30,6 @@ Thumbs.db
 # Build output (installers are published to GitHub Releases, never committed)
 dist/
 out/
+
+# Written by the release workflow with the commit ID (flows/versions.md VER-2)
+src/build-info.json
