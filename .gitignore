@@ -1,0 +1,32 @@
+# Minimum contents for every Cairn .gitignore (GEN-4)
+
+# Secrets and environment settings
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+*-credentials.json
+credentials*.json
+client_secret*.json
+
+# Dependencies
+node_modules/
+
+# Logs and temporary files
+*.log
+npm-debug.log*
+logs/
+tmp/
+coverage/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build output (installers are published to GitHub Releases, never committed)
+dist/
+out/

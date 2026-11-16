@@ -1,0 +1,25 @@
+/* Cairn Air Charter — official brand colors.
+   Import this file before any other stylesheet and use these variables
+   instead of typing hex values. */
+
+:root {
+  --cairn-basalt: #0B0D0F;
+  --cairn-graphite: #1A1D21;
+  --cairn-bone: #E9ECEE;
+  --cairn-beacon-green: #1CE783;
+  --cairn-flare-red: #FF3B30;
+  --cairn-signal-amber: #FFBF27;
+  --cairn-tidewater-blue: #304CB2;
+
+  /* Roles */
+  --color-background: var(--cairn-basalt);
+  --color-surface: var(--cairn-graphite);
+  --color-text: var(--cairn-bone);
+  --color-text-muted: rgba(233, 236, 238, 0.65);
+  --color-border: rgba(233, 236, 238, 0.12);
+  --color-primary: var(--cairn-beacon-green);
+  --color-success: var(--cairn-beacon-green);
+  --color-error: var(--cairn-flare-red);
+  --color-warning: var(--cairn-signal-amber);
+  --color-info: var(--cairn-tidewater-blue);
+}

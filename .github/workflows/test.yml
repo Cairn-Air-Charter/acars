@@ -1,0 +1,28 @@
+# Runs every test on every push and pull request (testing.md TEST-6).
+# A red X on GitHub means a test failed: never release that commit.
+#
+# ACARS has no database: SimConnect is replaced by recorded (for now synthetic) flights,
+# and Trailhead by fakes, so every test runs here without MSFS (flows/acars.md SRV-8).
+name: Tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      - run: npm test

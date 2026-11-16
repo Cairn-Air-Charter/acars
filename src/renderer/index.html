@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'none'; media-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Cairn ACARS</title>
+    <link rel="stylesheet" href="tokens.css">
+    <link rel="stylesheet" href="styles.css">
+    <script src="datetime.js" defer></script>
+    <script src="flight-charts.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <!-- Logging in (ACR-3) -->
+    <section id="loginView" class="login" hidden>
+      <div class="login-card">
+        <img class="logo" src="assets/cairn-primary-dark.png" alt="Cairn Air Charter" width="240" height="49">
+        <h1>Log in to ACARS</h1>
+        <p class="muted">Use the same email and password as Trailhead.</p>
+        <p id="loginMessage" class="message message-error" role="alert" hidden></p>
+        <form id="loginForm" class="stack" novalidate>
+          <label class="field">Email address
+            <input type="email" id="loginEmail" autocomplete="username" required>
+          </label>
+          <label class="field">Password
+            <input type="password" id="loginPassword" autocomplete="current-password" required>
+          </label>
+          <label class="check"><input type="checkbox" id="loginRemember"> Remember me on this PC</label>
+          <button type="submit" class="button button-primary" id="loginButton">Log in</button>
+        </form>
+        <p><a href="#" class="link" id="forgotLink">Forgot password?</a></p>
+      </div>
+    </section>
+
+    <!-- The app (ACR-5) -->
+    <div id="appView" class="app" hidden>
+      <header class="topbar">
+        <img class="logo" src="assets/cairn-primary-dark.png" alt="Cairn Air Charter" width="180" height="37">
+        <div class="topbar-info">
+          <span id="pilotName" class="pilot"></span>
+          <span id="youAreAt" class="muted"></span>
+        </div>
+        <span id="simPill" class="pill">MSFS not running</span>
+      </header>
+      <p id="offlineBar" class="offline" role="status" hidden></p>
+      <p id="updateBar" class="update" role="status" hidden></p>
+      <nav class="tabs" aria-label="ACARS">
+        <button type="button" class="tab" data-tab="flight" id="flightTab" hidden>Flight</button>
+        <button type="button" class="tab" data-tab="home">Home</button>
+        <button type="button" class="tab" data-tab="missions">Missions</button>
+        <button type="button" class="tab" data-tab="logbook">Logbook</button>
+        <button type="button" class="tab" data-tab="settings">Settings</button>
+      </nav>
+
+      <main class="content">
+        <!-- Home -->
+        <section id="homeView" class="view" hidden>
+          <div id="notices" class="stack"></div>
+          <section class="card stack" aria-labelledby="missionHeading">
+            <div class="card-head">
+              <h2 id="missionHeading">Your mission</h2>
+              <button type="button" class="button button-danger" id="dropButton" hidden>Drop mission</button>
+            </div>
+            <p id="noMission" class="muted" hidden>No mission right now. Find one in Missions.</p>
+            <div id="missionSummary"></div>
+            <div class="table-wrap"><table class="table" id="legTable" hidden>
+              <thead><tr><th>Leg</th><th>From</th><th>To</th><th>Distance</th><th>Passengers</th><th>Cargo</th><th>State</th><th></th></tr></thead>
+              <tbody id="legRows"></tbody>
+            </table></div>
+          </section>
+          <section class="card stack" aria-labelledby="hereHeading">
+            <div class="card-head">
+              <h2 id="hereHeading">Missions from here</h2>
+              <button type="button" class="link-button" id="allFromHere">See them all in Missions</button>
+            </div>
+            <ul id="hereMissions" class="rows"></ul>
+          </section>
+          <section class="card stack" id="foqaNotesCard" hidden aria-labelledby="foqaNotesHeading">
+            <h2 id="foqaNotesHeading">FOQA notes</h2>
+            <ul id="foqaNotes" class="rows"></ul>
+          </section>
+        </section>
+
+        <!-- Missions (ACR-6) -->
+        <section id="missionsView" class="view" hidden>
+          <form id="missionFilters" class="filters">
+            <label class="field">Type <select id="fType"><option value="">Any type</option></select></label>
+            <label class="field">Aircraft <select id="fAircraft"><option value="">Any aircraft</option></select></label>
+            <label class="field">Class <select id="fClass"><option value="">Any class</option></select></label>
+            <label class="field">Simulator <select id="fSim"><option value="">Any simulator</option></select></label>
+            <label class="field">Region <select id="fContinent"><option value="">Anywhere</option></select></label>
+            <label class="field">Country <select id="fCountry"><option value="">Any country</option></select></label>
+            <label class="field">Departs from <input type="text" id="fDeparture" maxlength="16" placeholder="Airport code"></label>
+            <label class="field">Sort
+              <select id="fSort">
+                <option value="newest">Newest</option>
+                <option value="expiring">Expiring soonest</option>
+                <option value="shortest">Shortest</option>
+                <option value="longest">Longest</option>
+                <option value="nearest">Nearest to my airport</option>
+              </select>
+            </label>
+            <label class="check"><input type="checkbox" id="fFromHere"> Departs from my current airport</label>
+            <button type="submit" class="button button-primary">Search</button>
+          </form>
+          <ul id="missionList" class="rows"></ul>
+          <div class="pager">
+            <button type="button" class="button button-secondary" id="missionsPrev" disabled>Previous</button>
+            <span id="missionsPage" class="muted"></span>
+            <button type="button" class="button button-secondary" id="missionsNext" disabled>Next</button>
+          </div>
+          <section id="missionDetail" class="card stack" hidden></section>
+        </section>
+
+        <!-- Logbook (ACR-7) -->
+        <section id="logbookView" class="view" hidden>
+          <section class="card">
+            <h2>Totals</h2>
+            <dl class="facts" id="logTotals"></dl>
+            <p class="muted">Only approved flights count. Repositions never do. Flight hours are block time.</p>
+          </section>
+          <div class="table-wrap"><table class="table">
+            <thead><tr><th>Date</th><th>Type</th><th>Route</th><th>Aircraft</th><th>Block time</th><th>Distance</th><th>Status</th></tr></thead>
+            <tbody id="logRows"></tbody>
+          </table></div>
+          <p id="logEmpty" class="muted" hidden>No flights logged yet. Your first one will show up here.</p>
+          <div class="pager">
+            <button type="button" class="button button-secondary" id="logPrev" disabled>Previous</button>
+            <span id="logPage" class="muted"></span>
+            <button type="button" class="button button-secondary" id="logNext" disabled>Next</button>
+          </div>
+          <section id="reportView" class="card stack" hidden></section>
+        </section>
+
+        <!-- Settings (ACR-17) -->
+        <section id="settingsView" class="view" hidden>
+          <section class="card stack">
+            <h2>Account</h2>
+            <p id="accountWho"></p>
+            <label class="check"><input type="checkbox" id="sRemember"> Remember me on this PC</label>
+            <div><button type="button" class="button button-secondary" id="logoutButton">Log out</button></div>
+          </section>
+          <section class="card stack">
+            <h2>Simulator</h2>
+            <p id="simDetail"></p>
+            <div><button type="button" class="button button-secondary" id="testSim">Test connection</button></div>
+          </section>
+          <section class="card stack">
+            <h2>Sounds and startup</h2>
+            <label class="check"><input type="checkbox" id="sChime"> Play a chime for new messages</label>
+            <label class="check"><input type="checkbox" id="sStartup"> Start ACARS with Windows</label>
+          </section>
+          <section class="card stack">
+            <h2>About</h2>
+            <p id="aboutVersion"></p>
+            <p id="updateStatus" class="muted"></p>
+            <div class="actions">
+              <button type="button" class="button button-secondary" id="checkUpdates">Check for updates</button>
+              <button type="button" class="button button-secondary" id="openTrailhead">Open Trailhead</button>
+              <button type="button" class="button button-secondary" id="openHelp">Help</button>
+            </div>
+          </section>
+          <section class="card stack">
+            <h2>Diagnostics</h2>
+            <p class="muted">If something isn't working, send the last 3 days of ACARS logs to staff. They never include your password or personal details.</p>
+            <p id="diagnosticsMessage" role="status" hidden></p>
+            <div><button type="button" class="button button-secondary" id="sendDiagnostics">Send diagnostics</button></div>
+          </section>
+        </section>
+
+        <!-- Flight (ACR-10) -->
+        <section id="flightView" class="view" hidden>
+          <ol class="timeline" id="phaseTimeline"></ol>
+          <dl class="oooi" id="oooiTimes"></dl>
+          <p id="resumeBanner" class="message message-warning" hidden>Lost MSFS. Your flight is saved. Reload the aircraft where you were and ACARS will pick back up.</p>
+          <p id="briefing" class="message message-info" hidden></p>
+          <p id="flightWarning" class="message message-warning" role="alert" hidden></p>
+          <div class="flight-grid">
+            <section class="card">
+              <h2>Live data</h2>
+              <dl class="live" id="liveData"></dl>
+              <p id="outboxStatus" class="muted" hidden></p>
+            </section>
+            <section class="card stack">
+              <h2>Status</h2>
+              <ol class="feed" id="statusFeed"></ol>
+            </section>
+            <section class="card stack" id="landingCard" hidden>
+              <h2>Landing</h2>
+              <dl class="facts" id="landingFacts"></dl>
+              <p class="muted">Preliminary. Your final numbers come with your flight report.</p>
+            </section>
+            <section class="card stack">
+              <h2>Cabin</h2>
+              <p id="cabinText" class="muted"></p>
+            </section>
+            <section class="card stack">
+              <h2>ACARS messages</h2>
+              <ul class="feed" id="messages"></ul>
+            </section>
+          </div>
+          <div class="actions">
+            <button type="button" class="button button-primary" id="fileButton" disabled>File flight report</button>
+            <button type="button" class="button button-danger" id="cancelFlightButton">Cancel flight</button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Pre-flight checklist (ACR-9) -->
+    <div id="checklistPanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="checklistHeading" hidden>
+      <div class="panel-card stack">
+        <h2 id="checklistHeading">Pre-flight checklist</h2>
+        <p id="checklistLeg" class="muted"></p>
+        <ul id="checklistItems" class="checks"></ul>
+        <p id="checklistError" class="message message-error" role="alert" hidden></p>
+        <div class="actions">
+          <button type="button" class="button button-primary" id="beginButton" disabled>Begin flight</button>
+          <button type="button" class="button button-secondary" id="checklistClose">Not yet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Filing the report (ACR-16) -->
+    <div id="filePanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="fileHeading" hidden>
+      <div class="panel-card stack">
+        <h2 id="fileHeading">File flight report</h2>
+        <dl class="facts" id="fileSummary"></dl>
+        <form id="diversionForm" class="stack" hidden>
+          <p id="diversionQuestion"></p>
+          <div class="picks" id="diversionPicks"></div>
+          <label class="field">What happened? (at least 10 characters)
+            <textarea id="diversionText" rows="3" maxlength="1000"></textarea>
+          </label>
+        </form>
+        <p id="fileError" class="message message-error" role="alert" hidden></p>
+        <div class="actions">
+          <button type="button" class="button button-primary" id="sendReport">Send report</button>
+          <button type="button" class="button button-secondary" id="fileClose">Not yet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmations -->
+    <div id="confirmPanel" class="panel" role="dialog" aria-modal="true" aria-labelledby="confirmText" hidden>
+      <div class="panel-card stack">
+        <p id="confirmText"></p>
+        <div class="actions">
+          <button type="button" class="button button-primary" id="confirmYes">Yes</button>
+          <button type="button" class="button button-secondary" id="confirmNo">No</button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

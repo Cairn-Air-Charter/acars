@@ -1,0 +1,68 @@
+{
+  "name": "cairn-acars",
+  "productName": "Cairn ACARS",
+  "version": "1.0.0",
+  "description": "Cairn ACARS: fly Cairn Air Charter missions in MSFS 2020 and MSFS 2024.",
+  "author": "Cairn Air Charter",
+  "private": true,
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test",
+    "dist": "electron-builder --win --publish never",
+    "release": "electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11",
+    "node-simconnect": "4.2.1"
+  },
+  "devDependencies": {
+    "electron": "45.2.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "org.cairncharter.acars",
+    "productName": "Cairn ACARS",
+    "copyright": "Copyright © Cairn Air Charter",
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Cairn-ACARS-${version}-Setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": false,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": false,
+      "shortcutName": "Cairn ACARS",
+      "uninstallDisplayName": "Cairn ACARS",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Cairn-Air-Charter",
+        "repo": "acars",
+        "releaseType": "release"
+      }
+    ]
+  }
+}
