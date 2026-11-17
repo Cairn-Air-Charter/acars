@@ -42,6 +42,7 @@
           <span id="youAreAt" class="muted"></span>
         </div>
         <span id="simPill" class="pill">MSFS not running</span>
+        <span id="siPill" class="pill ok" hidden>SayIntentions connected</span>
       </header>
       <p id="offlineBar" class="offline" role="status" hidden></p>
       <p id="updateBar" class="update" role="status" hidden></p>
@@ -165,6 +166,14 @@
             <p id="simDetail"></p>
             <div><button type="button" class="button button-secondary" id="testSim">Test connection</button></div>
           </section>
+          <!-- SayIntentions (flows/sayintentions.md SI-3) -->
+          <section class="card stack" id="siSettings" hidden>
+            <h2>SayIntentions</h2>
+            <p id="siKeyLine"></p>
+            <div><button type="button" class="button button-secondary" id="siProfileLink">Open your Trailhead profile</button></div>
+            <label class="check"><input type="checkbox" id="sTelexes"> Cairn dispatch telexes in the cockpit</label>
+            <p class="muted">Short company messages on your SayIntentions ACARS printer: your leg at the start, a nudge when staff message you, and a welcome when you park.</p>
+          </section>
           <section class="card stack">
             <h2>Sounds and startup</h2>
             <label class="check"><input type="checkbox" id="sChime"> Play a chime for new messages</label>
@@ -209,6 +218,11 @@
               <p id="outboxStatus" class="muted" hidden></p>
             </section>
           </div>
+          <!-- SayIntentions ATIS for the departure (before takeoff) and destination (SI-6) -->
+          <section class="card stack" id="atisBox" hidden>
+            <h2>ATIS</h2>
+            <div class="stack" id="atisList"></div>
+          </section>
           <div class="flight-grid">
             <section class="card stack">
               <h2>Flight events</h2>

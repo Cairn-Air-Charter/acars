@@ -1,6 +1,8 @@
 # Builds the Windows installer and publishes it to GitHub Releases (flows/acars.md ACR-2).
 # Runs when a version tag such as v1.0.1 is pushed. The tag must match "version" in
 # package.json. ACARS checks GitHub Releases for updates when it starts and every 6 hours.
+# The installer is also copied to Cairn's download bucket, which the website lists at
+# cairncharter.org/acars, so pilots never download it from GitHub.
 name: Release
 
 on:
@@ -10,6 +12,8 @@ on:
 
 permissions:
   contents: write
+  # Lets the job sign in to Google Cloud without a stored key (Workload Identity Federation)
+  id-token: write
 
 jobs:
   release:
@@ -51,3 +55,29 @@ jobs:
             --notes "Cairn ACARS ${GITHUB_REF_NAME#v} for Windows 10 and 11. Download the file ending in Setup.exe."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Copy the installer to the website's downloads (flows/acars.md ACR-2 → Downloads).
+      # GCP_WIF_PROVIDER and GCP_RELEASE_SA are repository variables (not secrets: neither
+      # gives access on its own). Google only lets this repository's version tags sign in.
+      - name: Sign in to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_RELEASE_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Copy the installer to the website's downloads
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          FILE="Cairn-ACARS-${VERSION}-Setup.exe"
+          SIZE=$(stat -c %s "dist/$FILE")
+          SHA=$(sha256sum "dist/$FILE" | cut -d' ' -f1)
+          DATE=$(date -u +%Y-%m-%d)
+          echo "{\"version\": \"$VERSION\", \"file\": \"$FILE\", \"size\": $SIZE, \"sha256\": \"$SHA\", \"date\": \"$DATE\"}" > "$RUNNER_TEMP/latest.json"
+          # The installer first, then latest.json, so the website never lists a file that isn't there yet
+          gcloud storage cp "dist/$FILE" "gs://cairn-acars-downloads/acars/$FILE" \
+            --cache-control="public, max-age=31536000, immutable" \
+            --content-type="application/vnd.microsoft.portable-executable" \
+            --content-disposition="attachment; filename=\"$FILE\""
+          gcloud storage cp "$RUNNER_TEMP/latest.json" "gs://cairn-acars-downloads/acars/latest.json" \
+            --cache-control="no-cache" \
+            --content-type="application/json"

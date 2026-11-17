@@ -486,6 +486,57 @@ $("logNext").addEventListener("click", () => loadLogbook(state.logOffset + PAGE)
 // SETTINGS (ACR-17)
 // ==========================================
 
+// ==========================================
+// SAYINTENTIONS (flows/sayintentions.md SI-3, SI-6)
+// ==========================================
+
+/** The pill and the Settings section. ACARS never sees a SayIntentions key, only whether one is saved. */
+function renderSayIntentions(si) {
+  state.si = si;
+  $("siPill").hidden = !(si && si.available && si.running);
+  $("siSettings").hidden = !(si && si.available);
+  if (!si) return;
+  $("siKeyLine").textContent = si.keySaved
+    ? "Your SayIntentions API key is saved on Trailhead."
+    : "Add your SayIntentions API key on your Trailhead profile to connect your flights.";
+  $("sTelexes").checked = si.telexes !== false;
+}
+
+$("siProfileLink").addEventListener("click", () => A.openInBrowser(`${TRAILHEAD}/profile`));
+$("sTelexes").addEventListener("change", () => A.saveSetting({ key: "telexes", value: $("sTelexes").checked }));
+A.on("sayintentions", renderSayIntentions);
+
+/** ATIS for the departure before takeoff and the destination, every 10 minutes during a flight (SI-6). */
+const BEFORE_TAKEOFF = new Set(["preflight", "pushback", "taxi_out", "takeoff"]);
+let atisTimer = null;
+async function loadAtis() {
+  const f = state.flight;
+  if (!f || !f.leg || !state.si || !state.si.keySaved) {
+    $("atisBox").hidden = true;
+    return;
+  }
+  const codes = [BEFORE_TAKEOFF.has(f.phase) && f.leg.departure ? f.leg.departure.code : null, f.leg.arrival ? f.leg.arrival.code : null].filter(Boolean);
+  const result = await A.atis(codes);
+  const rows = codes
+    .filter((c) => result.airports && result.airports[c])
+    .map((c) => {
+      const a = result.airports[c];
+      return el("div", { className: "stack" }, el("strong", {}, `${c}${a.activeRunway ? ` · active runway ${a.activeRunway}` : ""}`), el("p", { className: "atis" }, a.atis));
+    });
+  $("atisList").replaceChildren(...rows);
+  $("atisBox").hidden = rows.length === 0;
+}
+function startAtis() {
+  if (atisTimer) return;
+  loadAtis();
+  atisTimer = setInterval(loadAtis, 10 * 60 * 1000);
+}
+function stopAtis() {
+  clearInterval(atisTimer);
+  atisTimer = null;
+  $("atisBox").hidden = true;
+}
+
 async function loadSettings() {
   const s = await A.settings();
   state.chime = s.chime;
@@ -577,7 +628,7 @@ async function openChecklist(leg) {
 function renderChecks(checks) {
   if (!checks || $("checklistPanel").hidden) return;
   $("checklistItems").replaceChildren(...checks.items.map((item) => {
-    const cls = item.pass ? (item.key === "aircraft" ? "info" : "pass") : item.required ? "fail" : "advice";
+    const cls = item.pass ? (item.key === "aircraft" || item.key === "sayIntentions" ? "info" : "pass") : item.required ? "fail" : "advice";
     return el("li", { className: cls },
       el("span", { className: "dot", "aria-hidden": "true" }),
       el("span", {}, el("strong", {}, `${item.label}${item.pass ? "" : item.required ? "" : " (advice only)"}`), item.detail ? el("span", { className: "muted" }, ` — ${item.detail}`) : null));
@@ -611,12 +662,17 @@ async function refreshFlight() {
 
 function applyFlight(view) {
   const wasFlying = Boolean(state.flight);
+  const wasBeforeTakeoff = state.flight ? BEFORE_TAKEOFF.has(state.flight.phase) : true;
   state.flight = view;
   $("flightTab").hidden = !view;
   if (!view) {
+    stopAtis();
     if (wasFlying || state.tab === "flight") selectTab("home");
     return;
   }
+  startAtis();
+  // After takeoff the departure ATIS goes away
+  if (wasFlying && wasBeforeTakeoff && !BEFORE_TAKEOFF.has(view.phase)) loadAtis();
   if (!wasFlying) {
     show("filedLine", "");
     selectTab("flight");
@@ -730,6 +786,8 @@ function messageLink(link) {
   if (link.type === "disaster") return [`${TRAILHEAD}/disasters`, "Open Disasters"];
   if (link.type === "my_missions") return [`${TRAILHEAD}/my-missions`, "Open My missions"];
   if (link.type === "diagnostics" && /^\d+$/.test(id)) return [`${TRAILHEAD}/api/staff/diagnostics/${id}/file`, "Download diagnostics"];
+  if (link.type === "positions") return [`${TRAILHEAD}/positions`, "See open positions"];
+  if (link.type === "position_applications") return [`${TRAILHEAD}/operations#position-applications`, "Open position applications"];
   return null;
 }
 
@@ -837,14 +895,19 @@ async function showVersion() {
   $("versionCommit").hidden = !info.commit;
 }
 
-$("versionCommit").addEventListener("click", async () => {
+/** The What changed panel. After an update it says so at the top. */
+async function openChanges(updated) {
   const result = await A.changes();
-  $("changesIntro").textContent = result.commit ? `You're on Cairn ACARS ${result.version}, commit ${result.commit}.` : `You're on Cairn ACARS ${result.version}.`;
+  const on = result.commit ? `Cairn ACARS ${result.version}, commit ${result.commit}` : `Cairn ACARS ${result.version}`;
+  $("changesIntro").textContent = updated ? `ACARS was updated. You're now on ${on}. Here's what changed.` : `You're on ${on}.`;
   $("changesList").replaceChildren(...(result.entries.length
     ? result.entries.map((e) => el("li", {}, el("h3", {}, CairnTime.formatDateOnly(e.date)), el("ul", {}, e.notes.map((n) => el("li", {}, n)))))
     : [el("li", { className: "muted" }, "No notes yet.")]));
   $("changesPanel").hidden = false;
-});
+  $("changesClose").focus();
+}
+
+$("versionCommit").addEventListener("click", () => openChanges(false));
 $("changesClose").addEventListener("click", () => { $("changesPanel").hidden = true; });
 
 /** A few numbers only, in fixed-size boxes (styles.css .now), updated in place. */
@@ -974,7 +1037,11 @@ $("sendReport").addEventListener("click", async () => {
   loadHome();
 });
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   showVersion();
   startUp();
+  A.sayIntentions().then(renderSayIntentions).catch(() => {});
+  // The first time ACARS starts after an update, What changed opens by itself (VER-3)
+  const notice = await A.justUpdated();
+  if (notice && notice.updated) openChanges(true);
 });

@@ -208,3 +208,133 @@ test("a diagnostics note cut at 500 characters never splits an emoji or fails th
   await api.diagnostics(Buffer.from("PK"), "broken \uD800 half");
   assert.match(decodeURIComponent(calls[1].headers["X-Cairn-Diagnostics-Note"]), /^broken \uFFFD half$/);
 });
+
+test("What changed opens by itself the first time ACARS starts after an update, and only then (VER-3)", () => {
+  const { createPrefs } = require("../src/main/prefs");
+  // A brand-new install isn't an update
+  const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "acars-prefs-"));
+  assert.equal(createPrefs(fresh).updatedTo("1.0.6"), false);
+  assert.equal(createPrefs(fresh).updatedTo("1.0.6"), false, "same version again: not shown");
+  assert.equal(createPrefs(fresh).updatedTo("1.0.7"), true, "updated: shown");
+  assert.equal(createPrefs(fresh).updatedTo("1.0.7"), false, "next start: not shown again");
+  // A copy from before this setting existed (settings saved, no version recorded) was updated
+  const older = fs.mkdtempSync(path.join(os.tmpdir(), "acars-prefs-"));
+  fs.writeFileSync(path.join(older, "settings.json"), JSON.stringify({ chime: true }));
+  assert.equal(createPrefs(older).updatedTo("1.0.6"), true);
+  // The screen asks once per start; the panel says ACARS was updated
+  const main = read("src/main/main.js");
+  assert.match(main, /let showChangesOnStart = prefs\.updatedTo\(version\);/);
+  assert.match(main, /const updated = showChangesOnStart;\s+showChangesOnStart = false;/);
+  const source = app();
+  assert.match(source, /if \(notice && notice\.updated\) openChanges\(true\);/);
+  assert.match(source, /ACARS was updated\. You're now on \$\{on\}\. Here's what changed\./);
+});
+
+test("each release copies the installer, then latest.json, to the website's downloads with no stored key (ACR-2)", () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(read(".github/workflows/release.yml"));
+  assert.equal(workflow.permissions["id-token"], "write");
+  const steps = workflow.jobs.release.steps;
+  const names = steps.map((s) => s.name || s.uses);
+  assert.ok(names.indexOf("Publish one release with every file") < names.indexOf("Sign in to Google Cloud"), "GitHub release first");
+  const signIn = steps.find((s) => s.name === "Sign in to Google Cloud");
+  assert.deepEqual(signIn.with, { workload_identity_provider: "${{ vars.GCP_WIF_PROVIDER }}", service_account: "${{ vars.GCP_RELEASE_SA }}" });
+  const copy = steps.find((s) => s.name === "Copy the installer to the website's downloads").run;
+  assert.ok(copy.indexOf('acars/$FILE"') < copy.indexOf("acars/latest.json"), "installer before latest.json");
+  assert.ok(copy.includes('acars/latest.json" \\\n  --cache-control="no-cache"'), "latest.json is never cached");
+  assert.doesNotMatch(read(".github/workflows/release.yml"), /credentials_json|secrets\.GCP/);
+});
+
+// ==========================================
+// SAYINTENTIONS (flows/sayintentions.md SI-1, SI-3, SI-5, SI-6)
+// ==========================================
+
+test("only 'running' and 'flight active' are read from SayIntentions' local data; its key and email are thrown away (SI-3)", async () => {
+  const si = require("../src/main/sayintentions");
+  const local = { flight_details: { flight_id: 991, api_key: "SECRET-KEY-1234", Email: "pilot@example.com", userid: 77, callsign: "N123" } };
+  assert.deepEqual(si.readLocal(local), { running: true, flight: true });
+  assert.deepEqual(si.readLocal({}), { running: true, flight: false });
+  const seen = [];
+  const watch = si.createSayIntentionsWatch({ fetchImpl: async (url) => { seen.push(url); return { ok: true, json: async () => local }; }, onChange: (s) => seen.push(s) });
+  const state = await watch.poll();
+  assert.deepEqual(state, { running: true, flight: true });
+  assert.equal(seen[0], "http://localhost:43117/flightJSON");
+  assert.doesNotMatch(JSON.stringify(seen), /SECRET-KEY|pilot@example/);
+  const down = si.createSayIntentionsWatch({ fetchImpl: async () => { throw new Error("ECONNREFUSED"); } });
+  assert.deepEqual(await down.poll(), { running: false, flight: false });
+});
+
+test("no SayIntentions key is ever in ACARS: telexes go to Trailhead by type only (SI-1, SI-5)", async () => {
+  for (const file of ["src/main/api.js", "src/main/main.js", "src/main/sayintentions.js", "src/renderer/app.js", "src/main/preload.js"]) {
+    assert.doesNotMatch(read(file), /api_key|X-Developer-Key|SI_DEV_KEY|SI_VA_KEY|apipri\.sayintentions/i, file);
+  }
+  const { calls, api } = recorder();
+  await api.telex(12, "staff_message", "k3x9q2m7a");
+  await api.telex(12, "start", "../../etc");
+  await api.atis(["PADQ", "PANC", "x;y"]);
+  assert.equal(calls[0].url, "https://trailhead.example/api/acars/flights/12/telex");
+  assert.deepEqual(JSON.parse(calls[0].body), { type: "staff_message", messageId: "k3x9q2m7a" });
+  assert.deepEqual(JSON.parse(calls[1].body), { type: "start" });
+  assert.equal(calls[2].url, "https://trailhead.example/api/sayintentions/atis?codes=PADQ%2CPANC");
+});
+
+test("telexes are asked for only with a key saved, telexes on, and SayIntentions running with a flight; each once (SI-5)", async () => {
+  const si = require("../src/main/sayintentions");
+  const asked = [];
+  const sent = [];
+  const api = { telex: async (id, type, messageId) => { asked.push([id, type, messageId]); return { ok: true, data: { sent: true, text: "CAIRN DISPATCH. GOOD FLIGHT." } }; } };
+  let prefsTelexes = true;
+  let keySaved = true;
+  let flight = true;
+  const telex = si.createTelexer({ api, prefs: { get: () => prefsTelexes }, watch: { state: () => ({ running: true, flight }) }, keySaved: () => keySaved, onSent: (t) => sent.push(t) });
+  await telex(5, "start");
+  await telex(5, "start");
+  assert.deepEqual(asked, [[5, "start", undefined]], "once");
+  assert.deepEqual(sent, ["CAIRN DISPATCH. GOOD FLIGHT."]);
+  prefsTelexes = false;
+  await telex(5, "welcome");
+  prefsTelexes = true;
+  keySaved = false;
+  await telex(5, "welcome");
+  keySaved = true;
+  flight = false;
+  await telex(5, "welcome");
+  assert.equal(asked.length, 1, "telexes off, no key, or no SayIntentions flight: nothing asked");
+  // The checklist item is information only, and not shown without a key
+  assert.equal(si.checklistItem({ running: false, flight: false }, false), null);
+  assert.equal(si.checklistItem({ running: false, flight: false }, true).required, false);
+  assert.equal(si.checklistItem({ running: true, flight: true }, true).detail, "SayIntentions is running. Cairn dispatch will reach you by ACARS telex.");
+});
+
+test("the pill, Settings, telexes default on, and the ATIS box (SI-3, SI-6)", () => {
+  const page = html();
+  assert.match(page, /<span id="siPill" class="pill ok" hidden>SayIntentions connected<\/span>/);
+  assert.match(page, /id="sTelexes"> Cairn dispatch telexes in the cockpit/);
+  assert.match(page, /id="atisBox" hidden/);
+  const { createPrefs } = require("../src/main/prefs");
+  assert.equal(createPrefs(fs.mkdtempSync(path.join(os.tmpdir(), "acars-si-"))).visible().telexes, true);
+  const source = app();
+  assert.match(source, /\$\("siPill"\)\.hidden = !\(si && si\.available && si\.running\);/);
+  assert.match(source, /setInterval\(loadAtis, 10 \* 60 \* 1000\)/);
+  assert.match(read("src/main/main.js"), /if \(geo\.distanceNm\(lastSample\.lat, lastSample\.lon, view\.leg\.arrival\.lat, view\.leg\.arrival\.lon\) > 5\) return;/, "no welcome at a diversion airport");
+});
+
+test("a telex held back by the 60-second gap is tried again, a few times at most (SI-5)", async () => {
+  const si = require("../src/main/sayintentions");
+  const answers = [{ sent: false, reason: "limit" }, { sent: true, text: "CAIRN: NEW MESSAGE FROM CAIRN STAFF. READ IT IN CAIRN ACARS." }];
+  const asked = [];
+  const waits = [];
+  let pending = null;
+  const telex = si.createTelexer({
+    api: { telex: async (...args) => (asked.push(args), { ok: true, data: answers.shift() || { sent: false, reason: "limit" } }) },
+    prefs: { get: () => true },
+    watch: { state: () => ({ running: true, flight: true }) },
+    keySaved: () => true,
+    later: (fn, ms) => { waits.push(ms); pending = fn; },
+  });
+  await telex(5, "staff_message", "k3x9q2m7a");
+  assert.deepEqual(waits, [65000]);
+  await pending();
+  assert.equal(asked.length, 2);
+  assert.equal(waits.length, 1, "sent the second time: no more tries");
+});

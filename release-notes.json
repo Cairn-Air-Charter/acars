@@ -2,6 +2,17 @@
   {
     "date": "2026-11-16",
     "notes": [
+      "The first time you open a new version, ACARS shows you what changed.",
+      "Download Cairn ACARS from the Cairn website at cairncharter.org/acars.",
+      "With SayIntentions running, the top bar shows SayIntentions connected, and the pre-flight checklist says so.",
+      "Cairn dispatch telexes on your SayIntentions ACARS printer: your leg at the start, a nudge when staff message you, FOQA notes near your destination, and a welcome when you park. Turn them off in Settings.",
+      "An ATIS box on the Flight screen shows the SayIntentions ATIS and active runway.",
+      "You can write to a staff position, like the Chief Pilot, from Messages."
+    ]
+  },
+  {
+    "date": "2026-11-16",
+    "notes": [
       "Mission details now open right below the mission you click, instead of at the bottom of the window.",
       "The mission filters are laid out evenly, with the current-airport checkbox on its own row.",
       "The top bar shows your name only.",

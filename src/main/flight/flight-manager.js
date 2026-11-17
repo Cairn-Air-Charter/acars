@@ -108,6 +108,11 @@ function createFlightManager(deps) {
     events.emit("feed", { t, message, kind });
   }
 
+  /** A Cairn dispatch telex that reached the cockpit, in the events feed (flows/sayintentions.md SI-5). */
+  function uplink(message) {
+    if (flight) feed(message, Date.now(), "uplink");
+  }
+
   function addEvent(e) {
     const event = { seq: flight.eventSeq++, t: e.t, type: e.type, phase: e.phase || detector.phase, message: e.message || null, details: e.details || {} };
     flight.pendingEvents.push(event);
@@ -450,6 +455,7 @@ function createFlightManager(deps) {
     arrivalCheck,
     file,
     view,
+    uplink,
     get active() {
       return Boolean(flight);
     },

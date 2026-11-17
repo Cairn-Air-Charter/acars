@@ -205,3 +205,6 @@ img { max-width: 100%; }
 .changes { list-style: none; margin: 0; padding: 0; display: grid; gap: 16px; }
 .changes h3 { font-size: 1rem; margin-bottom: 6px; }
 .changes ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+
+/* SayIntentions ATIS on the Flight screen (flows/sayintentions.md SI-6) */
+.atis { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--color-text-muted); }

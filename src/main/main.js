@@ -19,6 +19,8 @@ const { createSimConnection } = require("./sim/simconnect");
 const { createUpdater } = require("./updater");
 const { isAllowedExternal } = require("./links");
 const releaseNotes = require("./release-notes");
+const { createSayIntentionsWatch, createTelexer, checklistItem } = require("./sayintentions");
+const geo = require("../shared/geo");
 
 const SYNC_EVERY_MS = 3 * 60 * 1000; // ACR-4
 const OFFLINE_RETRY_MS = 30 * 1000;
@@ -34,6 +36,8 @@ if (!app.requestSingleInstanceLock()) {
   const version = app.getVersion();
   const logger = createLogger(dataDir);
   const prefs = createPrefs(dataDir);
+  // What changed opens by itself the first time ACARS starts after an update (VER-3)
+  let showChangesOnStart = prefs.updatedTo(version);
   let ses = null;
   let api = null;
   let auth = null;
@@ -50,6 +54,12 @@ if (!app.requestSingleInstanceLock()) {
   let simPaused = false;
   let lastSample = null;
   let checklist = null; // { leg, runways, nearest, nearestAt }
+  // SayIntentions (flows/sayintentions.md SI-3): whether Trailhead has it switched on and the
+  // pilot has a key saved. Never the key itself.
+  let siInfo = { available: false, keySaved: false };
+  let siWatch = null;
+  let telex = null;
+  let welcomed = null; // the flight a welcome telex was asked for
   let reauthing = null;
 
   const send = (event, payload) => {
@@ -172,10 +182,35 @@ if (!app.requestSingleInstanceLock()) {
     const changed = markers ? Object.keys(next).filter((k) => next[k] !== markers[k]) : Object.keys(next);
     markers = next;
     if (changed.length || reason === "focus") send("sync", { changed, lastSyncAt });
+    if (changed.includes("messages") && markers) telexNewStaffMessages().catch(() => {});
     if (outbox.size) flushOutbox();
   }
 
+  // ---------------- SayIntentions (flows/sayintentions.md SI-3, SI-5) ----------------
+
+  function siView() {
+    return { ...siWatch.state(), available: siInfo.available, keySaved: siInfo.keySaved, telexes: prefs.get("telexes") !== false };
+  }
+
+  async function refreshSayIntentions() {
+    const result = await api.siStatus();
+    if (!result.ok) return;
+    const key = result.data.key || {};
+    siInfo = { available: result.data.available === true, keySaved: key.saved === true && key.status !== "refused" };
+    send("sayintentions", siView());
+  }
+
+  /** A staff message arrived during a flight: one telex per message, never its words (SI-5). */
+  async function telexNewStaffMessages() {
+    if (!flights.active) return;
+    const result = await api.messages("inbox", 0);
+    if (!result.ok) return;
+    const fresh = result.data.messages.filter((m) => !m.read && m.fromStaff).slice(0, 3);
+    for (const m of fresh) await telex(flights.flightId, "staff_message", m.id);
+  }
+
   function startLoops() {
+    siWatch.start();
     setInterval(() => syncNow("timer"), SYNC_EVERY_MS);
     setInterval(() => {
       if (!online) syncNow("offline");
@@ -210,7 +245,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!checklist) return null;
     const st = sim.status();
     const sample = lastSample ? { ...lastSample, paused: simPaused } : null;
-    return evaluateChecks({
+    const result = evaluateChecks({
       sim: st,
       sample,
       leg: { departure: { code: checklist.leg.departure_code, lat: checklist.leg.departure_lat, lon: checklist.leg.departure_lon, type: checklist.leg.departure_type } },
@@ -218,6 +253,10 @@ if (!app.requestSingleInstanceLock()) {
       aircraft: st.inFlight ? aircraftInfo().check : null,
       distances: home && home.settings ? home.settings.distances : null,
     });
+    // SayIntentions: information only, never blocks Begin flight (SI-3)
+    const si = siInfo.available ? checklistItem(siWatch.state(), siInfo.keySaved) : null;
+    if (si) result.items.push(si);
+    return result;
   }
 
   sim.events.on("status", (st) => {
@@ -256,6 +295,24 @@ if (!app.requestSingleInstanceLock()) {
     for (const event of ["live", "feed", "landing", "warning", "crashed"]) flights.events.on(event, (payload) => send(event, payload));
     flights.events.on("changed", (view) => send("flight", view));
     flights.events.on("arrivalBriefing", (payload) => send("briefing", { ...payload, notes: (home && home.foqaNotes) || [] }));
+    siWatch = createSayIntentionsWatch({ onChange: () => send("sayintentions", siView()) });
+    telex = createTelexer({
+      api,
+      prefs,
+      watch: siWatch,
+      keySaved: () => siInfo.available && siInfo.keySaved,
+      log: (e, d) => logger.info(e, d),
+      onSent: (text) => flights.uplink(`Cairn dispatch telex: ${text}`),
+    });
+    // Within 50 nm of the destination: a FOQA note telex, when Trailhead has notes for it
+    flights.events.on("arrivalBriefing", () => telex(flights.flightId, "foqa_note").catch(() => {}));
+    // Engines off at the destination (not a diversion): the welcome telex
+    flights.events.on("changed", (view) => {
+      if (!view || view.phase !== "engines_off" || welcomed === view.id || !lastSample || !view.leg || !view.leg.arrival) return;
+      if (geo.distanceNm(lastSample.lat, lastSample.lon, view.leg.arrival.lat, view.leg.arrival.lon) > 5) return;
+      welcomed = view.id;
+      telex(view.id, "welcome").catch(() => {});
+    });
 
     logger.prune();
     pruneFlightFiles(dataDir, FLIGHT_FILE_DAYS, Date.now());
@@ -325,7 +382,10 @@ if (!app.requestSingleInstanceLock()) {
 
     handle("home:get", async () => {
       const result = await api.home();
-      if (result.ok) home = result.data;
+      if (result.ok) {
+        home = result.data;
+        refreshSayIntentions().catch(() => {});
+      }
       else if (result.status === 0) setOnline(false);
       return { ...result, lastSyncAt };
     });
@@ -402,7 +462,11 @@ if (!app.requestSingleInstanceLock()) {
         distances: home.settings.distances,
         crashDetectionOff: lastSample.crashOn === false,
       });
-      if (result.ok) checklist = null;
+      if (result.ok) {
+        checklist = null;
+        // Cairn dispatch: the leg, load and due time on the cockpit printer (SI-5)
+        telex(flights.flightId, "start").catch(() => {});
+      }
       logger.info("flight_begin", { ok: result.ok, status: result.status });
       return result.ok ? { ok: true, flight: flights.view() } : { ok: false, error: result.message, status: result.status };
     });
@@ -423,15 +487,33 @@ if (!app.requestSingleInstanceLock()) {
     handle("settings:get", () => ({ ...prefs.visible(), hasSavedPassword: auth.hasSavedPassword() }));
     handle("settings:set", ({ key, value }) => {
       if (key === "chime") prefs.set("chime", value === true);
+      if (key === "telexes") {
+        prefs.set("telexes", value === true);
+        send("sayintentions", siView());
+      }
       if (key === "startWithWindows") {
         prefs.set("startWithWindows", value === true);
         app.setLoginItemSettings({ openAtLogin: value === true });
       }
       return prefs.visible();
     });
+    // SayIntentions: the pill, Settings and the ATIS box (SI-3, SI-6). Only airport codes go out.
+    handle("sayintentions:status", () => siView());
+    handle("sayintentions:atis", async (codes) => {
+      const clean = (Array.isArray(codes) ? codes : []).map((c) => String(c).toUpperCase()).filter((c) => /^[A-Z0-9]{3,4}$/.test(c)).slice(0, 4);
+      if (!clean.length || !siInfo.keySaved) return { ok: true, airports: {} };
+      const result = await api.atis(clean);
+      return result.ok ? { ok: true, airports: result.data.airports || {} } : { ok: false, airports: {} };
+    });
     handle("app:info", () => ({ version, commit: releaseNotes.commit(), logsFolder: logger.folder, trailhead: api.baseUrl, update: updater ? updater.state() : null }));
     // What changed (flows/versions.md VER-3): the notes that shipped with this version
     handle("app:changes", () => ({ ok: true, version, commit: releaseNotes.commit(), entries: releaseNotes.load() }));
+    // Answers true once per start after an update, so the panel opens only the first time
+    handle("app:justUpdated", () => {
+      const updated = showChangesOnStart;
+      showChangesOnStart = false;
+      return { updated };
+    });
     handle("app:checkUpdates", () => updater.checkNow());
     handle("app:openExternal", (url) => {
       if (!isAllowedExternal(url)) return { ok: false };

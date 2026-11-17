@@ -79,6 +79,12 @@ function createApi({ fetchImpl, baseUrl = TRAILHEAD_URL, version, osVersion, onU
     me: () => get("/api/auth/me"),
     home: () => get("/api/acars/home"),
     sync: () => get("/api/acars/sync"),
+    // SayIntentions (flows/sayintentions.md): whether a key is saved, ATIS, and telexes by
+    // type only. Trailhead holds every SayIntentions key; none ever comes to ACARS (SI-1).
+    siStatus: () => get("/api/sayintentions/status"),
+    atis: (codes) => get(`/api/sayintentions/atis?codes=${encodeURIComponent(codes.filter((c) => /^[A-Z0-9]{3,4}$/.test(c)).join(","))}`),
+    telex: (flightId, type, messageId) =>
+      post(`/api/acars/flights/${Number(flightId)}/telex`, { type: String(type), messageId: messageId && /^[a-z0-9]{9}$/.test(messageId) ? messageId : undefined }),
     missionOptions: () => get("/api/missions/options"),
     missions: (query) => get(`/api/missions?${new URLSearchParams(query)}`),
     mission: (id) => get(`/api/missions/${Number(id)}`),

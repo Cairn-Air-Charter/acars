@@ -8,7 +8,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 const call = (channel) => (...args) => ipcRenderer.invoke(channel, ...args);
 
 // Messages the main process sends to the screens
-const EVENTS = ["auth", "sim", "live", "feed", "landing", "flight", "checks", "sync", "connection", "warning", "crashed", "briefing", "update", "outbox"];
+const EVENTS = ["auth", "sim", "live", "feed", "landing", "flight", "checks", "sync", "connection", "warning", "crashed", "briefing", "update", "outbox", "sayintentions"];
 
 contextBridge.exposeInMainWorld("acars", {
   // Account (ACR-3)
@@ -46,6 +46,9 @@ contextBridge.exposeInMainWorld("acars", {
   cancelFlight: call("flight:cancel"),
   arrivalCheck: call("flight:arrival"),
   fileReport: call("flight:file"),
+  // SayIntentions (flows/sayintentions.md SI-3, SI-6)
+  sayIntentions: call("sayintentions:status"),
+  atis: call("sayintentions:atis"),
   // Settings and diagnostics (ACR-17)
   settings: call("settings:get"),
   saveSetting: call("settings:set"),
@@ -53,6 +56,7 @@ contextBridge.exposeInMainWorld("acars", {
   checkForUpdates: call("app:checkUpdates"),
   sendDiagnostics: call("app:diagnostics"),
   changes: call("app:changes"),
+  justUpdated: call("app:justUpdated"),
   openInBrowser: call("app:openExternal"),
   // Subscribe to updates from the main process; returns an unsubscribe function
   on(event, handler) {
